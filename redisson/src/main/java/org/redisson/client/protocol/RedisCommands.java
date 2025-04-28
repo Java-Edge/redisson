@@ -26,7 +26,7 @@ import org.redisson.client.protocol.decoder.*;
 import org.redisson.client.protocol.pubsub.PubSubStatusDecoder;
 import org.redisson.cluster.ClusterNodeInfo;
 import org.redisson.codec.CompositeCodec;
-import org.redisson.misc.RedisURI;
+import org.redisson.api.ObjectEncoding;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -65,6 +65,9 @@ public interface RedisCommands {
     RedisStrictCommand<Object> BITFIELD_SHORT = new RedisStrictCommand<>("BITFIELD", null,
                                                     new ListFirstObjectDecoder(), new ShortReplayConvertor());
     RedisStrictCommand<Void> BITFIELD_VOID = new RedisStrictCommand<>("BITFIELD", new VoidReplayConvertor());
+    
+    RedisStrictCommand<boolean[]> BITFIELD_BOOLEANS = new RedisStrictCommand<>("BITFIELD", null,
+                                                    new ArrayBooleanDecoder(), new BooleanReplayConvertor());
 
     RedisStrictCommand<Boolean> GETBIT = new RedisStrictCommand<Boolean>("GETBIT", new BooleanReplayConvertor());
     RedisStrictCommand<Long> BITS_SIZE = new RedisStrictCommand<Long>("STRLEN", new BitsSizeReplayConvertor());
@@ -299,7 +302,7 @@ public interface RedisCommands {
     RedisCommand<Object> BZPOPMIN_VALUE = new RedisCommand<Object>("BZPOPMIN", new ScoredSortedSetPolledObjectDecoder());
     RedisCommand<Object> BZPOPMAX_VALUE = new RedisCommand<Object>("BZPOPMAX", new ScoredSortedSetPolledObjectDecoder());
 
-    RedisCommand<Map<String, List<Object>>> BLPOP_NAME = new RedisCommand<>("BLPOP",
+    RedisCommand<org.redisson.api.Entry<String, Object>> BLPOP_NAME = new RedisCommand<>("BLPOP",
                     new ListObjectDecoder(0) {
                         @Override
                         public Object decode(List parts, State state) {
@@ -309,6 +312,17 @@ public interface RedisCommands {
                             return new org.redisson.api.Entry<>(parts.get(0), parts.get(1));
                         }
                     });
+
+    RedisCommand<org.redisson.api.Entry<String, Object>> BRPOP_NAME = new RedisCommand<>("BRPOP",
+            new ListObjectDecoder(0) {
+                @Override
+                public Object decode(List parts, State state) {
+                    if (parts.isEmpty()) {
+                        return null;
+                    }
+                    return new org.redisson.api.Entry<>(parts.get(0), parts.get(1));
+                }
+            });
 
     RedisCommand<Map<String, List<Object>>> BLMPOP = new RedisCommand<>("BLMPOP",
             new ListMultiDecoder2(
@@ -416,7 +430,7 @@ public interface RedisCommands {
                             String functionName = (String) parts.get(1);
                             String functionDescription = (String) parts.get(3);
                             List<FunctionLibrary.Flag> functionFlags = ((List<String>) parts.get(5)).stream()
-                                    .map(s -> FunctionLibrary.Flag.valueOf(s.toUpperCase().replace("-", "_")))
+                                    .map(s -> FunctionLibrary.Flag.valueOf(s.toUpperCase(Locale.ENGLISH).replace("-", "_")))
                                     .collect(Collectors.toList());
                             return new FunctionLibrary.Function(functionName, functionDescription, functionFlags);
                         }
@@ -506,6 +520,17 @@ public interface RedisCommands {
     RedisStrictCommand<Void> MSET = new RedisStrictCommand<Void>("MSET", new VoidReplayConvertor());
     RedisStrictCommand<Boolean> MSETNX = new RedisStrictCommand<Boolean>("MSETNX", new BooleanReplayConvertor());
 
+    RedisCommand<Boolean> HPEXPIRE = new RedisCommand("HPEXPIRE", new ListFirstObjectDecoder(), new Convertor<Boolean>() {
+        @Override
+        public Boolean convert(Object obj) {
+            Long val = (Long) obj;
+            if (val == -2) {
+                return null;
+            }
+
+            return val == 1;
+        }
+    });
     RedisCommand<Boolean> HPERSIST = new RedisCommand("HPERSIST", new ListFirstObjectDecoder(), new Convertor<Boolean>() {
         @Override
         public Boolean convert(Object obj) {
@@ -569,6 +594,7 @@ public interface RedisCommands {
     RedisStrictCommand<Integer> GET_INTEGER = new RedisStrictCommand<Integer>("GET", new IntegerReplayConvertor(0));
     RedisStrictCommand<Double> GET_DOUBLE = new RedisStrictCommand<Double>("GET", new DoubleNullSafeReplayConvertor());
     RedisCommand<Object> GETSET = new RedisCommand<Object>("GETSET");
+    RedisCommand<Object> LCS = new RedisCommand<>("LCS");
     RedisCommand<Long> GETSET_LONG = new RedisCommand<>("GETSET", new LongReplayConvertor());
     RedisCommand<Double> GETSET_DOUBLE = new RedisCommand<>("GETSET", new DoubleReplayConvertor(0D));
     RedisCommand<Void> SET = new RedisCommand<Void>("SET", new VoidReplayConvertor());
@@ -708,6 +734,15 @@ public interface RedisCommands {
     RedisStrictCommand<Boolean> NOT_EXISTS = new RedisStrictCommand<Boolean>("EXISTS", new BooleanNumberReplayConvertor(1L));
 
     RedisStrictCommand<Long> OBJECT_IDLETIME = new RedisStrictCommand<Long>("OBJECT", "IDLETIME", new LongReplayConvertor());
+    RedisStrictCommand<Integer> OBJECT_REFCOUNT = new RedisStrictCommand<Integer>("OBJECT", "REFCOUNT", new IntegerReplayConvertor(0));
+    RedisStrictCommand<Integer> OBJECT_FREQ = new RedisStrictCommand<Integer>("OBJECT", "FREQ", new IntegerReplayConvertor(0));
+    RedisStrictCommand<ObjectEncoding> OBJECT_ENCODING = new RedisStrictCommand<>("OBJECT", "ENCODING", new Convertor<ObjectEncoding>() {
+        @Override
+        public ObjectEncoding convert(Object obj) {
+            return ObjectEncoding.valueOfEncoding(obj);
+        }
+    });
+
     RedisStrictCommand<Long> MEMORY_USAGE = new RedisStrictCommand<Long>("MEMORY", "USAGE", new LongReplayConvertor());
     RedisStrictCommand<Map<String, String>> MEMORY_STATS = new RedisStrictCommand<>("MEMORY", "STATS", new StringMapReplayDecoder());
     RedisStrictCommand<Boolean> RENAMENX = new RedisStrictCommand<Boolean>("RENAMENX", new BooleanReplayConvertor());
@@ -721,6 +756,7 @@ public interface RedisCommands {
 
     RedisStrictCommand<Long> SPUBLISH = new RedisStrictCommand<Long>("SPUBLISH");
     RedisCommand<Long> PUBSUB_NUMSUB = new RedisCommand<>("PUBSUB", "NUMSUB", new ListObjectDecoder<>(1));
+    RedisCommand<Long> PUBSUB_NUMPAT = new RedisCommand<>("PUBSUB", "NUMPAT", new ListObjectDecoder<>(1));
     RedisCommand<List<String>> PUBSUB_CHANNELS = new RedisStrictCommand<>("PUBSUB", "CHANNELS", new StringListReplayDecoder());
     RedisCommand<List<String>> PUBSUB_SHARDCHANNELS = new RedisStrictCommand<>("PUBSUB", "SHARDCHANNELS", new StringListReplayDecoder());
     RedisCommand<Long> PUBSUB_SHARDNUMSUB = new RedisCommand<>("PUBSUB", "SHARDNUMSUB", new ListObjectDecoder<>(1));
@@ -739,10 +775,9 @@ public interface RedisCommands {
     Set<String> SCAN_COMMANDS = new HashSet<String>(
             Arrays.asList(HSCAN.getName(), SCAN.getName(), ZSCAN.getName(), SSCAN.getName()));
 
-    RedisStrictCommand<List<ClusterNodeInfo>> CLUSTER_NODES = new RedisStrictCommand<List<ClusterNodeInfo>>("CLUSTER", "NODES",
-            new ObjectDecoder(new ClusterNodesDecoder(false)));
-    RedisStrictCommand<List<ClusterNodeInfo>> CLUSTER_NODES_SSL = new RedisStrictCommand<List<ClusterNodeInfo>>("CLUSTER", "NODES",
-            new ObjectDecoder(new ClusterNodesDecoder(true)));
+    RedisStrictCommand<List<ClusterNodeInfo>> REDIS_CLUSTER_NODES = new RedisStrictCommand<List<ClusterNodeInfo>>("CLUSTER", "NODES",
+            new ObjectDecoder(new ClusterNodesDecoder("redis")));
+
     RedisStrictCommand<Long> TIME_LONG = new RedisStrictCommand<Long>("TIME", new TimeLongObjectDecoder());
     RedisStrictCommand<Time> TIME = new RedisStrictCommand<Time>("TIME", new TimeObjectDecoder());
     RedisStrictCommand<Map<String, String>> CLUSTER_INFO = new RedisStrictCommand<Map<String, String>>("CLUSTER", "INFO", new StringMapDataDecoder());
@@ -751,10 +786,6 @@ public interface RedisCommands {
     RedisStrictCommand<Void> SENTINEL_REMOVE = new RedisStrictCommand<Void>("SENTINEL", "REMOVE", new VoidReplayConvertor());
     RedisStrictCommand<Void> SENTINEL_MONITOR = new RedisStrictCommand<Void>("SENTINEL", "MONITOR", new VoidReplayConvertor());
     
-    RedisStrictCommand<RedisURI> SENTINEL_GET_MASTER_ADDR_BY_NAME = new RedisStrictCommand<>("SENTINEL", "GET-MASTER-ADDR-BY-NAME",
-            new RedisURIDecoder(false));
-    RedisStrictCommand<RedisURI> SENTINEL_GET_MASTER_ADDR_BY_NAME_SSL = new RedisStrictCommand<>("SENTINEL", "GET-MASTER-ADDR-BY-NAME",
-            new RedisURIDecoder(true));
     RedisCommand<List<Map<String, String>>> SENTINEL_MASTERS = new RedisCommand<List<Map<String, String>>>("SENTINEL", "MASTERS",
             new ListMultiDecoder2(new ListResultReplayDecoder(), new ObjectMapReplayDecoder()));
     RedisCommand<Map<String, String>> SENTINEL_MASTER = new RedisCommand("SENTINEL", "MASTER", new ObjectMapReplayDecoder());

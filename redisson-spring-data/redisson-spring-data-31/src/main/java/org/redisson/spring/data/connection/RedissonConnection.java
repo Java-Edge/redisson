@@ -30,7 +30,7 @@ import org.redisson.client.protocol.RedisStrictCommand;
 import org.redisson.client.protocol.convertor.*;
 import org.redisson.client.protocol.decoder.*;
 import org.redisson.command.BatchPromise;
-import org.redisson.command.CommandAsyncService;
+import org.redisson.command.CommandAsyncExecutor;
 import org.redisson.command.CommandBatchService;
 import org.redisson.connection.MasterSlaveEntry;
 import org.redisson.misc.CompletableFutureWrapper;
@@ -76,14 +76,14 @@ public class RedissonConnection extends AbstractRedisConnection {
 
     private boolean closed;
     protected final Redisson redisson;
-    
-    CommandAsyncService executorService;
+
+    CommandAsyncExecutor executorService;
     private RedissonSubscription subscription;
     
     public RedissonConnection(RedissonClient redisson) {
         super();
         this.redisson = (Redisson) redisson;
-        executorService = (CommandAsyncService) this.redisson.getCommandExecutor();
+        executorService = this.redisson.getCommandExecutor();
     }
 
     @Override
@@ -255,7 +255,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         return new ScanCursor<byte[]>(0, options) {
 
             private RedisClient client;
-            private Iterator<MasterSlaveEntry> entries = redisson.getConnectionManager().getEntrySet().iterator();
+            private Iterator<MasterSlaveEntry> entries = executorService.getConnectionManager().getEntrySet().iterator();
             private MasterSlaveEntry entry = entries.next();
             
             @Override
@@ -1559,7 +1559,7 @@ public class RedissonConnection extends AbstractRedisConnection {
     }
 
     protected void resetConnection() {
-        executorService = (CommandAsyncService) this.redisson.getCommandExecutor();
+        executorService = this.redisson.getCommandExecutor();
         index = -1;
         indexToRemove.clear();
     }
@@ -1607,7 +1607,7 @@ public class RedissonConnection extends AbstractRedisConnection {
     public void subscribe(MessageListener listener, byte[]... channels) {
         checkSubscription();
         
-        subscription = new RedissonSubscription(executorService, redisson.getConnectionManager().getSubscribeService(), listener);
+        subscription = new RedissonSubscription(executorService, listener);
         subscription.subscribe(channels);
     }
 
@@ -1628,7 +1628,7 @@ public class RedissonConnection extends AbstractRedisConnection {
     public void pSubscribe(MessageListener listener, byte[]... patterns) {
         checkSubscription();
         
-        subscription = new RedissonSubscription(executorService, redisson.getConnectionManager().getSubscribeService(), listener);
+        subscription = new RedissonSubscription(executorService, listener);
         subscription.pSubscribe(patterns);
     }
 
@@ -1763,7 +1763,7 @@ public class RedissonConnection extends AbstractRedisConnection {
 
     @Override
     public List<RedisClientInfo> getClientList() {
-        throw new UnsupportedOperationException();
+        return read(null, StringCodec.INSTANCE, RedisCommands.CLIENT_LIST);
     }
 
 //    @Override
@@ -2688,7 +2688,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         return write(key, ByteArrayCodec.INSTANCE, RedisCommands.RPOP_LIST, key, count);
     }
 
-    private static final RedisCommand<List<Boolean>> SMISMEMBER = new RedisCommand<>("SMISMEMBER", new ObjectListReplayDecoder<>());
+    private static final RedisCommand<List<Boolean>> SMISMEMBER = new RedisCommand("SMISMEMBER", new ObjectListReplayDecoder<>(), new BooleanReplayConvertor());
 
     @Override
     public List<Boolean> sMIsMember(byte[] key, byte[]... value) {

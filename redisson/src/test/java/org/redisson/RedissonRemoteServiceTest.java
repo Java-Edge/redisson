@@ -9,6 +9,7 @@ import org.redisson.api.annotation.RRemoteAsync;
 import org.redisson.api.annotation.RRemoteReactive;
 import org.redisson.api.annotation.RRemoteRx;
 import org.redisson.codec.SerializationCodec;
+import org.redisson.config.Config;
 import org.redisson.remote.RemoteServiceAckTimeoutException;
 import org.redisson.remote.RemoteServiceTimeoutException;
 import reactor.core.Disposable;
@@ -333,17 +334,18 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
     public void testFreeWorkers() throws InterruptedException, ExecutionException {
         RedissonClient r1 = createInstance();
         ExecutorService executor = Executors.newSingleThreadExecutor();
-        RRemoteService rs = r1.getRemoteService();
+        RRemoteService rs = r1.getRemoteService("testFreeWorkers");
         rs.register(RemoteInterface.class, new RemoteImpl(), 1, executor);
         assertThat(rs.getFreeWorkers(RemoteInterface.class)).isEqualTo(1);
         
         RedissonClient r2 = createInstance();
-        RemoteInterfaceAsync ri = r2.getRemoteService().get(RemoteInterfaceAsync.class);
+        RemoteInterfaceAsync ri = r2.getRemoteService("testFreeWorkers").get(RemoteInterfaceAsync.class);
         
         RFuture<Void> f = ri.timeoutMethod();
         Thread.sleep(200);
         assertThat(rs.getFreeWorkers(RemoteInterface.class)).isEqualTo(0);
         f.get();
+        Thread.sleep(200);
         assertThat(rs.getFreeWorkers(RemoteInterface.class)).isEqualTo(1);
 
         r1.shutdown();
@@ -358,10 +360,10 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
         RedissonClient r1 = createInstance();
         AtomicInteger iterations = new AtomicInteger();
         ExecutorService executor = Executors.newSingleThreadExecutor();
-        r1.getRemoteService().register(RemoteInterface.class, new RemoteImpl(iterations), 1, executor);
+        r1.getRemoteService("testCancelAsync").register(RemoteInterface.class, new RemoteImpl(iterations), 1, executor);
         
         RedissonClient r2 = createInstance();
-        RemoteInterfaceAsync ri = r2.getRemoteService().get(RemoteInterfaceAsync.class);
+        RemoteInterfaceAsync ri = r2.getRemoteService("testCancelAsync").get(RemoteInterfaceAsync.class);
         
         RFuture<Void> f = ri.cancelMethod();
         Thread.sleep(500);
@@ -656,7 +658,7 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
 
         RemoteInterface serviceRemoteInterface = client.getRemoteService("MyServiceNamespace").get(RemoteInterface.class);
         RemoteInterface otherServiceRemoteInterface = client.getRemoteService("MyOtherServiceNamespace").get(RemoteInterface.class);
-        RemoteInterface defaultServiceRemoteInterface = client.getRemoteService().get(RemoteInterface.class);
+        RemoteInterface defaultServiceRemoteInterface = client.getRemoteService("MyOtherServiceNamespace2").get(RemoteInterface.class);
 
         assertThat(serviceRemoteInterface.resultMethod(21L)).isEqualTo(42L);
 
@@ -688,13 +690,25 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
     }
 
     @Test
+    public void testInnerCodec() {
+        Config config = createConfig();
+        config.setCodec(new SerializationCodec() {});
+
+        RedissonClient redisson = Redisson.create(config);
+        redisson.getRemoteService().register(RemoteInterface.class, new RemoteImpl());
+
+        RemoteInterface service = redisson.getRemoteService().get(RemoteInterface.class);
+        assertThat(service.resultMethod(21L)).isEqualTo(42L);
+    }
+
+    @Test
     public void testInvocationWithSerializationCodec() {
         RedissonClient server = Redisson.create(createConfig().setCodec(new SerializationCodec()));
         RedissonClient client = Redisson.create(createConfig().setCodec(new SerializationCodec()));
         try {
-            server.getRemoteService().register(RemoteInterface.class, new RemoteImpl());
+            server.getRemoteService("testInvocationWithSerializationCodec").register(RemoteInterface.class, new RemoteImpl());
 
-            RemoteInterface service = client.getRemoteService().get(RemoteInterface.class);
+            RemoteInterface service = client.getRemoteService("testInvocationWithSerializationCodec").get(RemoteInterface.class);
 
             try {
                 assertThat(service.resultMethod(21L)).isEqualTo(42L);
@@ -810,11 +824,11 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
         RedissonClient server = createInstance();
         RedissonClient client = createInstance();
         try {
-            server.getRemoteService().register(RemoteInterface.class, new RemoteImpl());
+            server.getRemoteService("testAckWithoutResultInvocations").register(RemoteInterface.class, new RemoteImpl());
 
             // fire and forget with an ack timeout of 1 sec
             RemoteInvocationOptions options = RemoteInvocationOptions.defaults().expectAckWithin(1, TimeUnit.SECONDS).noResult();
-            RemoteInterface service = client.getRemoteService().get(RemoteInterface.class, options);
+            RemoteInterface service = client.getRemoteService("testAckWithoutResultInvocations").get(RemoteInterface.class, options);
 
             service.voidMethod("noResult", 100L);
 
@@ -918,5 +932,19 @@ public class RedissonRemoteServiceTest extends RedisDockerTest {
 
         r1.shutdown();
         r2.shutdown();
+    }
+    
+    @Test
+    public void testDelayMethod() throws InterruptedException {
+        RedissonClient client = createInstance();
+        RRemoteService r1 = client.getRemoteService();
+        r1.register(RemoteInterface.class, new RemoteImpl());
+        
+        RemoteInvocationOptions options = RemoteInvocationOptions.defaults().noAck().expectResultWithin(1, TimeUnit.SECONDS);
+        Assertions.assertThrows(RemoteServiceTimeoutException.class, () -> r1.get(RemoteInterface.class, options).timeoutMethod());
+        
+        RFuture<Void> future = r1.get(RemoteInterfaceAsync.class, options).timeoutMethod();
+        Thread.sleep(3000);
+        assertThat(future.isDone()).isEqualTo(true);
     }
 }

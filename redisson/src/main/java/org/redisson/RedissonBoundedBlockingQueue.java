@@ -236,6 +236,17 @@ public class RedissonBoundedBlockingQueue<V> extends RedissonQueue<V> implements
     }
 
     @Override
+    public Entry<String, V> pollLastFromAnyWithName(Duration timeout, String... queueNames) throws InterruptedException {
+        return commandExecutor.getInterrupted(pollLastFromAnyWithNameAsync(timeout, queueNames));
+    }
+
+    @Override
+    public RFuture<Entry<String, V>> pollLastFromAnyWithNameAsync(Duration timeout, String... queueNames) {
+        RFuture<Entry<String, V>> takeFuture = blockingQueue.pollLastFromAnyWithNameAsync(timeout, queueNames);
+        return wrapTakeFuture(takeFuture);
+    }
+
+    @Override
     public Map<String, List<V>> pollFirstFromAny(Duration duration, int count, String... queueNames) {
         return get(pollFirstFromAnyAsync(duration, count, queueNames));
     }
@@ -324,10 +335,6 @@ public class RedissonBoundedBlockingQueue<V> extends RedissonQueue<V> implements
     
     @Override
     public int drainTo(Collection<? super V> c, int maxElements) {
-        if (maxElements <= 0) {
-            return 0;
-        }
-
         return get(drainToAsync(c, maxElements));
     }
 
@@ -336,7 +343,10 @@ public class RedissonBoundedBlockingQueue<V> extends RedissonQueue<V> implements
         if (c == null) {
             throw new NullPointerException();
         }
-
+        if (maxElements <= 0) {
+            return new CompletableFutureWrapper<>(0);
+        }
+        
         return commandExecutor.evalWriteAsync(getRawName(), codec, new RedisCommand<Object>("EVAL", new ListDrainToDecoder(c)),
                 "local elemNum = math.min(ARGV[1], redis.call('llen', KEYS[1])) - 1;" +
                         "local vals = redis.call('lrange', KEYS[1], 0, elemNum); " +

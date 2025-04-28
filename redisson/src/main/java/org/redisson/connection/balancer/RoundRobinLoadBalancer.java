@@ -15,22 +15,27 @@
  */
 package org.redisson.connection.balancer;
 
+import org.redisson.connection.ClientConnectionsEntry;
+
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import org.redisson.connection.ClientConnectionsEntry;
 
 /**
  * 
  * @author Nikita Koksharov
  *
  */
-public class RoundRobinLoadBalancer implements LoadBalancer {
+public class RoundRobinLoadBalancer extends BaseLoadBalancer {
 
     private final AtomicInteger index = new AtomicInteger(-1);
 
     @Override
     public ClientConnectionsEntry getEntry(List<ClientConnectionsEntry> clientsCopy) {
+        clientsCopy = filter(clientsCopy);
+        if (clientsCopy.isEmpty()) {
+            return null;
+        }
+
         int ind = Math.abs(index.incrementAndGet() % clientsCopy.size());
         return clientsCopy.get(ind);
     }

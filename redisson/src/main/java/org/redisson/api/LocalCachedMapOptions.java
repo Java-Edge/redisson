@@ -161,6 +161,8 @@ public class LocalCachedMapOptions<K, V> extends MapOptions<K, V> {
     private StoreMode storeMode;
     private boolean storeCacheMiss;
     private ExpirationEventPolicy expirationEventPolicy;
+    private boolean useObjectAsCacheKey;
+    private boolean useTopicPattern;
 
     protected LocalCachedMapOptions() {
     }
@@ -175,6 +177,7 @@ public class LocalCachedMapOptions<K, V> extends MapOptions<K, V> {
         this.cacheProvider = copy.cacheProvider;
         this.storeMode = copy.storeMode;
         this.storeCacheMiss = copy.storeCacheMiss;
+        this.useObjectAsCacheKey = copy.useObjectAsCacheKey;
     }
     
     /**
@@ -206,6 +209,8 @@ public class LocalCachedMapOptions<K, V> extends MapOptions<K, V> {
                     .storeMode(StoreMode.LOCALCACHE_REDIS)
                     .syncStrategy(SyncStrategy.INVALIDATE)
                     .storeCacheMiss(false)
+                    .useObjectAsCacheKey(false)
+                    .useTopicPattern(false)
                     .expirationEventPolicy(ExpirationEventPolicy.SUBSCRIBE_WITH_KEYEVENT_PATTERN);
     }
 
@@ -389,6 +394,14 @@ public class LocalCachedMapOptions<K, V> extends MapOptions<K, V> {
         return this.storeCacheMiss;
     }
 
+    public boolean isUseObjectAsCacheKey() {
+        return useObjectAsCacheKey;
+    }
+
+    public boolean isUseTopicPattern() {
+        return useTopicPattern;
+    }
+
     /**
      * Defines whether to store a cache miss into the local cache.
      *
@@ -397,6 +410,30 @@ public class LocalCachedMapOptions<K, V> extends MapOptions<K, V> {
      */
     public LocalCachedMapOptions<K, V> storeCacheMiss(boolean storeCacheMiss) {
         this.storeCacheMiss = storeCacheMiss;
+        return this;
+    }
+
+    /**
+     * Defines whether to store CacheKey of an object key into the local cache. <br>
+     * This indicator only affects when {@link LocalCachedMapOptions#cacheProvider} != {@link CacheProvider#CAFFEINE}
+     *
+     * @param useObjectAsCacheKey - whether to store CacheKey of an object key into the local cache
+     * @return LocalCachedMapOptions instance
+     */
+    public LocalCachedMapOptions<K, V> useObjectAsCacheKey(boolean useObjectAsCacheKey) {
+        this.useObjectAsCacheKey = useObjectAsCacheKey;
+        return this;
+    }
+
+    /**
+     * Defines whether to use a global topic pattern listener
+     * that applies to all local cache instances belonging to the same Redisson instance.
+     *
+     * @param value whether to use a global topic pattern listener
+     * @return LocalCachedMapOptions instance
+     */
+    public LocalCachedMapOptions<K, V> useTopicPattern(boolean value) {
+        this.useTopicPattern = value;
         return this;
     }
 

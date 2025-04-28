@@ -20,7 +20,6 @@ import org.redisson.api.NodeType;
 import org.redisson.client.*;
 import org.redisson.cluster.ClusterSlotRange;
 import org.redisson.command.CommandAsyncExecutor;
-import org.redisson.command.CommandAsyncService;
 import org.redisson.config.*;
 import org.redisson.liveobject.core.RedissonObjectBuilder;
 import org.redisson.misc.RedisURI;
@@ -64,7 +63,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
 
     private boolean lastAttempt;
 
-    public MasterSlaveConnectionManager(BaseMasterSlaveServersConfig<?> cfg, Config configCopy) {
+    MasterSlaveConnectionManager(BaseMasterSlaveServersConfig<?> cfg, Config configCopy) {
         if (cfg instanceof MasterSlaveServersConfig) {
             this.config = (MasterSlaveServersConfig) cfg;
             if (this.config.getSlaveAddresses().isEmpty()
@@ -273,7 +272,6 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
         MasterSlaveServersConfig c = new MasterSlaveServersConfig();
 
         c.setPingConnectionInterval(cfg.getPingConnectionInterval());
-        c.setSslEnableEndpointIdentification(cfg.isSslEnableEndpointIdentification());
         c.setSslProvider(cfg.getSslProvider());
         c.setSslKeystoreType(cfg.getSslKeystoreType());
         c.setSslTruststore(cfg.getSslTruststore());
@@ -315,8 +313,10 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
         c.setTcpNoDelay(cfg.isTcpNoDelay());
         c.setNameMapper(cfg.getNameMapper());
         c.setCredentialsResolver(cfg.getCredentialsResolver());
+        c.setCredentialsReapplyInterval(cfg.getCredentialsReapplyInterval());
         c.setCommandMapper(cfg.getCommandMapper());
         c.setSubscriptionTimeout(cfg.getSubscriptionTimeout());
+        c.setSslVerificationMode(cfg.getSslVerificationMode());
 
         return c;
     }
@@ -355,7 +355,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
                 .setConnectTimeout(timeout)
                 .setCommandTimeout(commandTimeout)
                 .setSslHostname(sslHostname)
-                .setSslEnableEndpointIdentification(config.isSslEnableEndpointIdentification())
+                .setSslVerificationMode(config.getSslVerificationMode())
                 .setSslProvider(config.getSslProvider())
                 .setSslKeystoreType(config.getSslKeystoreType())
                 .setSslTruststore(config.getSslTruststore())
@@ -382,6 +382,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
                 .setProtocol(serviceManager.getCfg().getProtocol())
                 .setCommandMapper(config.getCommandMapper())
                 .setCredentialsResolver(config.getCredentialsResolver())
+                .setCredentialsReapplyInterval(config.getCredentialsReapplyInterval())
                 .setConnectedListener(addr -> {
                     if (!serviceManager.isShuttingDown()) {
                         NodeType nt = getNodeType(type, addr);
@@ -403,6 +404,10 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
     }
 
     private NodeType getNodeType(NodeType type, InetSocketAddress address) {
+        if (getServiceManager().getCfg().isSingleConfig()) {
+            return NodeType.MASTER;
+        }
+
         if (type != NodeType.SENTINEL) {
             MasterSlaveEntry entry = getEntry(address);
             if (entry != null) {
@@ -567,6 +572,6 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
 
     @Override
     public CommandAsyncExecutor createCommandExecutor(RedissonObjectBuilder objectBuilder, RedissonObjectBuilder.ReferenceType referenceType) {
-        return new CommandAsyncService(this, objectBuilder, referenceType);
+        return CommandAsyncExecutor.create(this, objectBuilder, referenceType);
     }
 }

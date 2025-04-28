@@ -46,7 +46,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author Nikita Koksharov
  *
  */
-public class RedissonReliableTopic extends RedissonExpirable implements RReliableTopic {
+public final class RedissonReliableTopic extends RedissonExpirable implements RReliableTopic {
 
     private static final Logger log = LoggerFactory.getLogger(RedissonReliableTopic.class);
 
@@ -77,7 +77,7 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
     private final AtomicBoolean subscribed = new AtomicBoolean();
     private final String timeoutName;
 
-    public RedissonReliableTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
+    RedissonReliableTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
         super(codec, commandExecutor, name);
         stream = new RedissonStream<>(new CompositeCodec(StringCodec.INSTANCE, codec), commandExecutor, name);
         if (subscriberId == null) {
@@ -87,7 +87,7 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
         this.timeoutName = getTimeout(getRawName());
     }
 
-    public RedissonReliableTopic(CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
+    RedissonReliableTopic(CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
         this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name, subscriberId);
     }
 
@@ -190,11 +190,12 @@ public class RedissonReliableTopic extends RedissonExpirable implements RReliabl
                     return;
                 }
 
-                if (ex.getCause().getMessage().contains("NOGROUP")) {
+                if (ex.getCause() != null
+                        && ex.getCause().getMessage().contains("NOGROUP")) {
                     return;
                 }
 
-                log.error(ex.getCause().getMessage(), ex.getCause());
+                log.error("Unable to poll a new element. Subscriber id: {}", id, ex.getCause());
 
                 getServiceManager().newTimeout(task -> {
                     if (getServiceManager().isShuttingDown()) {

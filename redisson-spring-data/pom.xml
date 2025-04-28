@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-parent</artifactId>
-        <version>3.34.2-SNAPSHOT</version>
+        <version>3.45.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
@@ -29,12 +29,18 @@
         <module>redisson-spring-data-31</module>
         <module>redisson-spring-data-32</module>
         <module>redisson-spring-data-33</module>
+        <module>redisson-spring-data-34</module>
     </modules>
 
     <build>
         <plugins>
             <plugin>
          	<artifactId>maven-javadoc-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>
@@ -56,7 +62,7 @@
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
-            <version>4.2.1</version>
+            <version>4.2.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -104,10 +110,10 @@
       	<dependency>
       		<groupId>io.projectreactor</groupId>
       		<artifactId>reactor-test</artifactId>
-                <version>3.6.7</version>
+                <version>3.6.11</version>
       		<scope>test</scope>
       	</dependency>
-
+<!--
       	<dependency>
       		<groupId>redis.clients</groupId>
       		<artifactId>jedis</artifactId>
@@ -121,7 +127,7 @@
        		<version>6.3.2.RELEASE</version>
             <scope>test</scope>
        	</dependency>
-
+-->
     </dependencies>
 
 </project>

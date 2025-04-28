@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-parent</artifactId>
-        <version>3.34.2-SNAPSHOT</version>
+        <version>3.45.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
@@ -18,12 +18,18 @@
         <module>redisson-tomcat-8</module>
         <module>redisson-tomcat-9</module>
         <module>redisson-tomcat-10</module>
+        <module>redisson-tomcat-11</module>
     </modules>
 
     <build>
         <plugins>
             <plugin>
          	<artifactId>maven-javadoc-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

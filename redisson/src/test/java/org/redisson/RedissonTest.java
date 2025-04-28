@@ -2,6 +2,11 @@ package org.redisson;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.resolver.AddressResolverGroup;
+import io.netty.resolver.dns.DnsServerAddressStreamProvider;
+import io.netty.resolver.dns.DnsServerAddresses;
 import io.netty.util.CharsetUtil;
 import net.bytebuddy.utility.RandomString;
 import nl.altindag.log.LogCaptor;
@@ -27,6 +32,7 @@ import org.redisson.config.*;
 import org.redisson.connection.CRC16;
 import org.redisson.connection.ConnectionListener;
 import org.redisson.connection.MasterSlaveConnectionManager;
+import org.redisson.connection.SequentialDnsAddressResolverFactory;
 import org.redisson.connection.pool.SlaveConnectionPool;
 import org.redisson.misc.RedisURI;
 import org.testcontainers.containers.ContainerState;
@@ -112,6 +118,18 @@ public class RedissonTest extends RedisDockerTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void testLazyInitializationCluster() {
+        testInCluster(client -> {
+            Config config = client.getConfig();
+            config.setLazyInitialization(true);
+
+            RedissonClient redisson = Redisson.create(config);
+            redisson.getBucket("test").set(1);
+            redisson.shutdown();
+        });
     }
 
     @Test
@@ -494,6 +512,46 @@ public class RedissonTest extends RedisDockerTest {
 
     }
 
+//    @Test
+    public void testNettyThreadsAmount() throws Exception {
+        Config config = redisson.getConfig();
+        config.setCodec(new SlowCodec());
+        config.setReferenceEnabled(false);
+        config.setThreads(32);
+        config.setNettyThreads(20);
+        RedissonClient redisson = Redisson.create(config);
+
+        CountDownLatch latch = new CountDownLatch(16);
+        AtomicBoolean hasErrors = new AtomicBoolean();
+        for (int i = 0; i < 16; i++) {
+            Thread t = new Thread() {
+                public void run() {
+                    for (int i = 0; i < 10; i++) {
+                        try {
+                            redisson.getBucket("123").set("1");
+                            redisson.getBucket("123").get();
+                            if (hasErrors.get()) {
+                                latch.countDown();
+                                return;
+                            }
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            hasErrors.set(true);
+                        }
+
+                    }
+                    latch.countDown();
+                };
+            };
+            t.start();
+        }
+
+        assertThat(latch.await(60, TimeUnit.SECONDS)).isTrue();
+        assertThat(hasErrors).isFalse();
+
+        redisson.shutdown();
+    }
+
     @Test
     public void testReconnection() {
         Config config = redisson.getConfig();
@@ -577,6 +635,36 @@ public class RedissonTest extends RedisDockerTest {
     }
 
     @Test
+    public void testCredentialsReapplyInterval() throws InterruptedException {
+        GenericContainer<?> redis = createRedis("--requirepass", "1234");
+        redis.start();
+
+        CountDownLatch latch = new CountDownLatch(8);
+
+        Config config = createConfig(redis);
+        config.useSingleServer()
+                .setConnectionMinimumIdleSize(1)
+                .setConnectionPoolSize(1)
+                .setCredentialsReapplyInterval(5000)
+                .setCredentialsResolver(new CredentialsResolver() {
+                    @Override
+                    public CompletionStage<Credentials> resolve(InetSocketAddress address) {
+                        latch.countDown();
+                        return CompletableFuture.completedFuture(new Credentials(null, "1234"));
+                    }
+                });
+
+        RedissonClient rc = Redisson.create(config);
+        RBucket<String> b = rc.getBucket("test");
+        b.set("123");
+
+        assertThat(latch.await(20, TimeUnit.SECONDS)).isTrue();
+
+        rc.shutdown();
+        redis.stop();
+    }
+
+    @Test
     public void testCommandMapper() {
         Config c = createConfig();
         c.useSingleServer().setCommandMapper(n -> {
@@ -648,6 +736,32 @@ public class RedissonTest extends RedisDockerTest {
         System.out.println(t);
         Config c = Config.fromYAML(t);
         assertThat(c.toYAML()).isEqualTo(t);
+    }
+
+    @Test
+    public void testMasterSlave() throws InterruptedException {
+        SimpleDnsServer s = new SimpleDnsServer();
+
+        Config c2 = new Config();
+        c2.setAddressResolverGroupFactory(new SequentialDnsAddressResolverFactory() {
+            @Override
+            public AddressResolverGroup<InetSocketAddress> create(Class<? extends DatagramChannel> channelType, Class<? extends SocketChannel> socketChannelType, DnsServerAddressStreamProvider nameServerProvider) {
+                return super.create(channelType, socketChannelType, hostname ->
+                        DnsServerAddresses.singleton(s.getAddr()).stream());
+            }
+        });
+        c2.useMasterSlaveServers()
+                .setMasterAddress("redis://masterhost:" + REDIS.getFirstMappedPort())
+                .addSlaveAddress("redis://slavehost1:" + REDIS.getFirstMappedPort(),
+                                            "redis://slavehost2:" + REDIS.getFirstMappedPort());
+
+        RedissonClient cc = Redisson.create(c2);
+        RBucket<String> b = cc.getBucket("test");
+        b.set("1");
+        assertThat(b.get()).isEqualTo("1");
+
+        cc.shutdown();
+        s.stop();
     }
 
     @Test
@@ -860,11 +974,28 @@ public class RedissonTest extends RedisDockerTest {
         long quietPeriod = TimeUnit.MILLISECONDS.toMillis(50);
         long timeOut = quietPeriod + TimeUnit.SECONDS.toMillis(2);
         RedissonClient r = createInstance();
+        RBucket<Integer> b = r.getBucket("test1");
+        for (int i = 0; i < 10; i++) {
+            b.get();
+        }
+
+        List<RFuture<Integer>> futures = new ArrayList<>();
+        RBlockingQueue<Integer> bb = r.getBlockingQueue("test2");
+        for (int i = 0; i < 10; i++) {
+            RFuture<Integer> s = bb.takeAsync();
+            futures.add(s);
+        }
+
         long startTime = System.currentTimeMillis();
         r.shutdown(quietPeriod, timeOut, TimeUnit.MILLISECONDS);
         long shutdownTime = System.currentTimeMillis() - startTime;
 
         Assertions.assertTrue(shutdownTime > quietPeriod);
+
+        assertThat(futures).hasSize(10);
+        for (RFuture<Integer> future : futures) {
+            assertThat(future.exceptionNow().getMessage()).isEqualTo("Redisson is shutdown");
+        }
     }
 
 }

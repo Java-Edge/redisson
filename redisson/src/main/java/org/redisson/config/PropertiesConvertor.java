@@ -74,14 +74,18 @@ public class PropertiesConvertor {
         StringBuilder builder = new StringBuilder();
         builder.append(parts[0]);
         for (int i = 1; i < parts.length; i++) {
-            builder.append(parts[i].substring(0, 1).toUpperCase())
+            builder.append(parts[i].substring(0, 1).toUpperCase(Locale.ENGLISH))
                     .append(parts[i].substring(1));
         }
         return builder.toString();
     }
 
     private static final Set<String> LIST_NODES = new HashSet<>(
-                            Arrays.asList("node-addresses", "nodeaddresses", "slave-addresses", "slaveaddresses", "addresses"));
+            Arrays.asList(
+                    "node-addresses", "nodeaddresses",
+                    "slave-addresses", "slaveaddresses",
+                    "sentinel-addresses", "sentineladdresses",
+                    "addresses"));
 
     private static final Set<String> CLASS_PROPERTIES = new HashSet<>(
             Arrays.asList("codec",

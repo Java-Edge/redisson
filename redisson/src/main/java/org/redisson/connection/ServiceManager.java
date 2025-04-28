@@ -18,13 +18,15 @@ package org.redisson.connection;
 import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.epoll.EpollDatagramChannel;
+import io.netty.channel.epoll.EpollDomainSocketChannel;
 import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.epoll.EpollSocketChannel;
 import io.netty.channel.kqueue.KQueueDatagramChannel;
+import io.netty.channel.kqueue.KQueueDomainSocketChannel;
 import io.netty.channel.kqueue.KQueueEventLoopGroup;
 import io.netty.channel.kqueue.KQueueSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.DuplexChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.incubator.channel.uring.IOUringDatagramChannel;
@@ -45,9 +47,9 @@ import io.netty.util.internal.PlatformDependent;
 import org.redisson.ElementsSubscribeService;
 import org.redisson.QueueTransferService;
 import org.redisson.RedissonShutdownException;
-import org.redisson.Version;
 import org.redisson.api.NatMapper;
 import org.redisson.api.RFuture;
+import org.redisson.api.RLock;
 import org.redisson.cache.LRUCacheMap;
 import org.redisson.client.RedisNodeNotFoundException;
 import org.redisson.client.codec.Codec;
@@ -57,13 +59,19 @@ import org.redisson.config.Config;
 import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.config.Protocol;
 import org.redisson.config.TransportMode;
+import org.redisson.liveobject.resolver.MapResolver;
 import org.redisson.misc.CompletableFutureWrapper;
+import org.redisson.misc.FastRemovalQueue;
 import org.redisson.misc.RandomXoshiro256PlusPlus;
 import org.redisson.misc.RedisURI;
 import org.redisson.remote.ResponseEntry;
+import org.redisson.renewal.LockRenewalScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -75,6 +83,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 /**
  *
@@ -118,7 +128,7 @@ public final class ServiceManager {
 
     private final EventLoopGroup group;
 
-    private final Class<? extends SocketChannel> socketChannelClass;
+    private Class<? extends DuplexChannel> socketChannelClass;
 
     private final AddressResolverGroup<InetSocketAddress> resolverGroup;
 
@@ -146,8 +156,22 @@ public final class ServiceManager {
 
     private final QueueTransferService queueTransferService = new QueueTransferService();
 
+    private LockRenewalScheduler renewalScheduler;
+
     public ServiceManager(MasterSlaveServersConfig config, Config cfg) {
-        Version.logVersion();
+        RedisURI u = null;
+        if (config.getMasterAddress() != null) {
+            u = new RedisURI(config.getMasterAddress());
+            if (u.isUDS()) {
+                if (!cfg.isSingleConfig()) {
+                    throw new IllegalStateException("UDS is supported only in a single server mode");
+                }
+                if (cfg.getTransportMode() != TransportMode.EPOLL
+                        && cfg.getTransportMode() != TransportMode.KQUEUE) {
+                    throw new IllegalStateException("UDS is supported only if transportMode = EPOLL or KQUEUE");
+                }
+            }
+        }
 
         if (cfg.getTransportMode() == TransportMode.EPOLL) {
             if (cfg.getEventLoopGroup() == null) {
@@ -161,10 +185,15 @@ public final class ServiceManager {
             }
 
             this.socketChannelClass = EpollSocketChannel.class;
+
+            if (u != null && u.isUDS()) {
+                this.socketChannelClass = EpollDomainSocketChannel.class;
+            }
+
             if (PlatformDependent.isAndroid()) {
                 this.resolverGroup = DefaultAddressResolverGroup.INSTANCE;
             } else {
-                this.resolverGroup = cfg.getAddressResolverGroupFactory().create(EpollDatagramChannel.class, socketChannelClass, DnsServerAddressStreamProviders.platformDefault());
+                this.resolverGroup = cfg.getAddressResolverGroupFactory().create(EpollDatagramChannel.class, EpollSocketChannel.class, DnsServerAddressStreamProviders.platformDefault());
             }
         } else if (cfg.getTransportMode() == TransportMode.KQUEUE) {
             if (cfg.getEventLoopGroup() == null) {
@@ -178,7 +207,12 @@ public final class ServiceManager {
             }
 
             this.socketChannelClass = KQueueSocketChannel.class;
-            this.resolverGroup = cfg.getAddressResolverGroupFactory().create(KQueueDatagramChannel.class, socketChannelClass, DnsServerAddressStreamProviders.platformDefault());
+
+            if (u != null && u.isUDS()) {
+                this.socketChannelClass = KQueueDomainSocketChannel.class;
+            }
+
+            this.resolverGroup = cfg.getAddressResolverGroupFactory().create(KQueueDatagramChannel.class, KQueueSocketChannel.class, DnsServerAddressStreamProviders.platformDefault());
         } else if (cfg.getTransportMode() == TransportMode.IO_URING) {
             if (cfg.getEventLoopGroup() == null) {
                 this.group = createIOUringGroup(cfg);
@@ -187,7 +221,7 @@ public final class ServiceManager {
             }
 
             this.socketChannelClass = IOUringSocketChannel.class;
-            this.resolverGroup = cfg.getAddressResolverGroupFactory().create(IOUringDatagramChannel.class, socketChannelClass, DnsServerAddressStreamProviders.platformDefault());
+            this.resolverGroup = cfg.getAddressResolverGroupFactory().create(IOUringDatagramChannel.class, IOUringSocketChannel.class, DnsServerAddressStreamProviders.platformDefault());
         } else {
             if (cfg.getEventLoopGroup() == null) {
                 if (cfg.getNettyExecutor() != null) {
@@ -203,7 +237,7 @@ public final class ServiceManager {
             if (PlatformDependent.isAndroid()) {
                 this.resolverGroup = DefaultAddressResolverGroup.INSTANCE;
             } else {
-                this.resolverGroup = cfg.getAddressResolverGroupFactory().create(NioDatagramChannel.class, socketChannelClass, DnsServerAddressStreamProviders.platformDefault());
+                this.resolverGroup = cfg.getAddressResolverGroupFactory().create(NioDatagramChannel.class, NioSocketChannel.class, DnsServerAddressStreamProviders.platformDefault());
             }
         }
 
@@ -340,23 +374,26 @@ public final class ServiceManager {
         return connectionWatcher;
     }
 
-    public Class<? extends SocketChannel> getSocketChannelClass() {
+    public Class<? extends DuplexChannel> getSocketChannelClass() {
         return socketChannelClass;
     }
 
-    private final AtomicInteger lastFuturesCounter = new AtomicInteger();
-    private final Deque<CompletableFuture<?>> lastFutures = new ConcurrentLinkedDeque<>();
+    private final FastRemovalQueue<CompletableFuture<?>> lastFutures = new FastRemovalQueue<>();
 
     public void addFuture(CompletableFuture<?> future) {
-        lastFutures.addLast(future);
-        if (lastFuturesCounter.incrementAndGet() > 100) {
-            lastFutures.pollFirst();
-            lastFuturesCounter.decrementAndGet();
+        lastFutures.add(future);
+        future.whenComplete((r, e) -> {
+            lastFutures.remove(future);
+        });
+
+        if (lastFutures.size() > 100) {
+            lastFutures.poll();
         }
     }
 
     public void shutdownFutures(long timeout, TimeUnit unit) {
-        CompletableFuture<Void> future = CompletableFuture.allOf(lastFutures.toArray(new CompletableFuture[0]));
+        Stream<CompletableFuture<?>> stream = StreamSupport.stream(lastFutures.spliterator(), false);
+        CompletableFuture<Void> future = CompletableFuture.allOf(stream.toArray(CompletableFuture[]::new));
         try {
             future.get(timeout, unit);
         } catch (Exception e) {
@@ -370,15 +407,30 @@ public final class ServiceManager {
         shutdownLatch.set(true);
     }
 
+    private volatile String lastClusterNodes;
+
+    public void setLastClusterNodes(String lastClusterNodes) {
+        this.lastClusterNodes = lastClusterNodes;
+    }
+
+    public <T> CompletableFuture<T> createNodeNotFoundFuture(String channelName, int slot) {
+        RedisNodeNotFoundException ex = new RedisNodeNotFoundException("Node for name: " + channelName + " slot: " + slot
+                + " hasn't been discovered yet. Check cluster slots coverage using CLUSTER NODES command. " +
+                "Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
+        CompletableFuture<T> promise = new CompletableFuture<>();
+        promise.completeExceptionally(ex);
+        return promise;
+    }
+
     public RedisNodeNotFoundException createNodeNotFoundException(NodeSource source) {
         RedisNodeNotFoundException ex;
         if (cfg.isClusterConfig()
                 && source.getSlot() != null
                     && source.getAddr() == null
                         && source.getRedisClient() == null) {
-            ex = new RedisNodeNotFoundException("Node for slot: " + source.getSlot() + " hasn't been discovered yet. Check cluster slots coverage using CLUSTER NODES command. Increase value of retryAttempts and/or retryInterval settings.");
+            ex = new RedisNodeNotFoundException("Node for slot: " + source.getSlot() + " hasn't been discovered yet. Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
         } else {
-            ex = new RedisNodeNotFoundException("Node: " + source + " hasn't been discovered yet. Increase value of retryAttempts and/or retryInterval settings.");
+            ex = new RedisNodeNotFoundException("Node: " + source + " hasn't been discovered yet. Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
         }
         return ex;
     }
@@ -520,8 +572,9 @@ public final class ServiceManager {
         CompletionStage<T> future = supplier.get();
         future.whenComplete((r, e) -> {
             if (e != null) {
-                if (e.getCause().getMessage() != null
-                        && e.getCause().getMessage().equals("None of slaves were synced")) {
+                if (e.getCause() != null
+                        && e.getCause().getMessage() != null
+                            && e.getCause().getMessage().equals("None of slaves were synced")) {
                     if (attempts.decrementAndGet() < 0) {
                         result.completeExceptionally(e);
                         return;
@@ -552,6 +605,10 @@ public final class ServiceManager {
     }
 
     private final Random random = RandomXoshiro256PlusPlus.create();
+
+    public Long generateValue() {
+        return random.nextLong();
+    }
 
     public String generateId() {
         return ByteBufUtil.hexDump(generateIdArray());
@@ -623,5 +680,29 @@ public final class ServiceManager {
 
     public Map<String, AtomicInteger> getAddersCounter() {
         return addersCounter;
+    }
+
+    private final MapResolver mapResolver = new MapResolver(this);
+
+    public MapResolver getLiveObjectMapResolver() {
+        return mapResolver;
+    }
+
+    public static final RLock DUMMY_LOCK = (RLock) Proxy.newProxyInstance(ServiceManager.class.getClassLoader(), new Class[] {RLock.class}, new InvocationHandler() {
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            if (method.getName().endsWith("lockAsync")) {
+                return new CompletableFutureWrapper<>((Void) null);
+            }
+            return null;
+        }
+    });
+
+    public void register(LockRenewalScheduler renewalScheduler) {
+        this.renewalScheduler = renewalScheduler;
+    }
+
+    public LockRenewalScheduler getRenewalScheduler() {
+        return renewalScheduler;
     }
 }

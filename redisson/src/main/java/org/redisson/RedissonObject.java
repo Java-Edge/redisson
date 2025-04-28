@@ -27,7 +27,7 @@ import org.redisson.client.protocol.RedisCommands;
 import org.redisson.client.protocol.pubsub.PubSubType;
 import org.redisson.command.BatchService;
 import org.redisson.command.CommandAsyncExecutor;
-import org.redisson.config.Protocol;
+import org.redisson.api.ObjectEncoding;
 import org.redisson.connection.ServiceManager;
 import org.redisson.misc.CompletableFutureWrapper;
 import org.redisson.misc.Hash;
@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -321,7 +322,7 @@ public abstract class RedissonObject implements RObject {
             String nn = mapName(newName);
             String oldName = getRawName();
             CompletionStage<Void> f = dumpAsync()
-                                       .thenCompose(val -> commandExecutor.writeAsync(nn, StringCodec.INSTANCE, RedisCommands.RESTORE, nn, 0, val))
+                                       .thenCompose(val -> commandExecutor.writeAsync(nn, StringCodec.INSTANCE, RedisCommands.RESTORE, nn, 0, val, "REPLACE"))
                                        .thenCompose(val -> {
                                            setName(newName);
                                            return deleteAsync(oldName).thenApply(r -> null);
@@ -483,6 +484,17 @@ public abstract class RedissonObject implements RObject {
         }
     }
 
+    protected final void encode(Collection<Object> params, Consumer<Collection<Object>> func) {
+        try {
+            func.accept(params);
+        } catch (Exception e) {
+            params.forEach(v -> {
+                ReferenceCountUtil.safeRelease(v);
+            });
+            throw e;
+        }
+    }
+
     protected final void encodeMapValues(Collection<Object> params, Collection<?> values) {
         try {
             for (Object object : values) {
@@ -596,8 +608,38 @@ public abstract class RedissonObject implements RObject {
     }
 
     @Override
+    public int getReferenceCount() {
+        return get(getReferenceCountAsync());
+    }
+
+    @Override
+    public int getAccessFrequency() {
+        return get(getAccessFrequencyAsync());
+    }
+
+    @Override
+    public ObjectEncoding getInternalEncoding() {
+        return get(getInternalEncodingAsync());
+    }
+
+    @Override
     public RFuture<Long> getIdleTimeAsync() {
         return commandExecutor.writeAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.OBJECT_IDLETIME, getRawName());
+    }
+
+    @Override
+    public RFuture<Integer> getReferenceCountAsync() {
+        return commandExecutor.readAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.OBJECT_REFCOUNT, getRawName());
+    }
+
+    @Override
+    public RFuture<Integer> getAccessFrequencyAsync() {
+        return commandExecutor.readAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.OBJECT_FREQ, getRawName());
+    }
+
+    @Override
+    public RFuture<ObjectEncoding> getInternalEncodingAsync() {
+        return commandExecutor.readAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.OBJECT_ENCODING, getRawName());
     }
 
     protected final void removeListener(int listenerId, String... names) {
@@ -651,7 +693,7 @@ public abstract class RedissonObject implements RObject {
     }
 
     protected final RFuture<Integer> addTrackingListenerAsync(TrackingListener listener) {
-        if (getServiceManager().getCfg().getProtocol() != Protocol.RESP3) {
+        if (!getServiceManager().isResp3()) {
             throw new IllegalStateException("`protocol` config setting should be set to RESP3 value");
         }
 
@@ -663,9 +705,15 @@ public abstract class RedissonObject implements RObject {
     }
 
     protected <T extends ObjectListener> int addListener(String name, T listener, BiConsumer<T, String> consumer) {
+        return addListener(name, listener, consumer, m -> m.equals(getRawName()));
+    }
+
+    protected final <T extends ObjectListener> int addListener(String name, T listener,
+                                                               BiConsumer<T, String> consumer,
+                                                               Function<String, Boolean> condition) {
         RPatternTopic topic = new RedissonPatternTopic(StringCodec.INSTANCE, commandExecutor, name);
         int id = topic.addListener(String.class, (pattern, channel, msg) -> {
-            if (msg.equals(getRawName())) {
+            if (condition.apply(msg)) {
                 consumer.accept(listener, msg);
             }
         });
@@ -673,10 +721,17 @@ public abstract class RedissonObject implements RObject {
         return id;
     }
 
-    protected <T extends ObjectListener> RFuture<Integer> addListenerAsync(String name, T listener, BiConsumer<T, String> consumer) {
+    protected <T extends ObjectListener> RFuture<Integer> addListenerAsync(String name, T listener,
+                                                                           BiConsumer<T, String> consumer) {
+        return addListenerAsync(name, listener, consumer, m -> m.equals(getRawName()));
+    }
+
+    protected final <T extends ObjectListener> RFuture<Integer> addListenerAsync(String name, T listener,
+                                                                           BiConsumer<T, String> consumer,
+                                                                           Function<String, Boolean> condition) {
         RPatternTopic topic = new RedissonPatternTopic(StringCodec.INSTANCE, commandExecutor, name);
         RFuture<Integer> f = topic.addListenerAsync(String.class, (pattern, channel, msg) -> {
-            if (msg.equals(getRawName())) {
+            if (condition.apply(msg)) {
                 consumer.accept(listener, msg);
             }
         });
@@ -748,7 +803,7 @@ public abstract class RedissonObject implements RObject {
             return new CompletableFutureWrapper<>((Void) null);
         }
 
-        CompletableFuture<Void> f = subscribeService.removeListenerAsync(PubSubType.UNSUBSCRIBE, ChannelName.TRACKING, listenerId);
+        CompletableFuture<Void> f = subscribeService.removeListenerAsync(PubSubType.UNSUBSCRIBE, ChannelName.newList(ChannelName.TRACKING), listenerId);
         f = f.whenComplete((r, e) -> {
             if (!commandExecutor.isTrackChanges()) {
                 commandExecutor = commandExecutor.copy(false);

@@ -386,7 +386,7 @@ public class RedissonPermitExpirableSemaphore extends RedissonExpirable implemen
             params.add(ByteBufUtil.decodeHexDump(permitId));
         }
         
-        CompletionStage<List<String>> future = commandExecutor.syncedEval(getRawName(), ByteArrayCodec.INSTANCE, RedisCommands.EVAL_STRING,
+        CompletionStage<List<String>> future = commandExecutor.syncedEvalNoRetry(getRawName(), ByteArrayCodec.INSTANCE, RedisCommands.EVAL_STRING,
                   "local expiredIds = redis.call('zrangebyscore', KEYS[2], 0, ARGV[3], 'limit', 0, ARGV[1]); " +
                   "if #expiredIds > 0 then " +
                       "redis.call('zrem', KEYS[2], unpack(expiredIds)); " +
@@ -657,6 +657,12 @@ public class RedissonPermitExpirableSemaphore extends RedissonExpirable implemen
         }
 
         return commandExecutor.syncedEvalWithRetry(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_INTEGER,
+                "for i = 4, #ARGV, 1 do " +
+                            "local expire = redis.call('zscore', KEYS[3], ARGV[i]);" +
+                            "if expire== false or tonumber(expire) <= tonumber(ARGV[2]) then " +
+                                "return 0;" +
+                            "end; " +
+                       "end; " +
                 "local expiredIds = redis.call('zrangebyscore', KEYS[3], 0, ARGV[2], 'limit', 0, -1); " +
                 "if #expiredIds > 0 then " +
                     "redis.call('zrem', KEYS[3], unpack(expiredIds)); " +
@@ -670,9 +676,6 @@ public class RedissonPermitExpirableSemaphore extends RedissonExpirable implemen
                     "table.insert(keys, ARGV[i]); " +
                 "end; " +
                 "local removed = redis.call('zrem', KEYS[3], unpack(keys)); " +
-                "if tonumber(removed) == 0 then " +
-                    "return 0;" +
-                "end; " +
                 "redis.call('incrby', KEYS[1], removed); " +
                 "redis.call(ARGV[3], KEYS[2], removed); " +
                 "return removed;",
@@ -736,6 +739,7 @@ public class RedissonPermitExpirableSemaphore extends RedissonExpirable implemen
             if (res == permitsIds.size()) {
                 return null;
             }
+
             throw new CompletionException(new IllegalArgumentException("Permits with ids " + permitsIds + " have already been released or don't exist"));
         });
         return new CompletableFutureWrapper<>(f);
@@ -905,6 +909,45 @@ public class RedissonPermitExpirableSemaphore extends RedissonExpirable implemen
     @Override
     public boolean updateLeaseTime(String permitId, long leaseTime, TimeUnit unit) {
         return get(updateLeaseTimeAsync(permitId, leaseTime, unit));
+    }
+    
+    @Override
+    public RFuture<Long> getLeaseTimeAsync(String permitId) {
+        byte[] id = ByteBufUtil.decodeHexDump(permitId);
+        CompletionStage<Long> f = commandExecutor.evalWriteAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_LONG,
+                "local expiredIds = redis.call('zrangebyscore', KEYS[2], 0, ARGV[3], 'limit', 0, -1); " +
+                        "if #expiredIds > 0 then " +
+                            "redis.call('zrem', KEYS[2], unpack(expiredIds)); " +
+                            "local value = redis.call('incrby', KEYS[1], #expiredIds); " +
+                            "if tonumber(value) > 0 then " +
+                                "redis.call(ARGV[4], KEYS[3], value); " +
+                            "end;" +
+                        "end; " +
+                        
+                        "local value = redis.call('zscore', KEYS[2], ARGV[1]); " +
+                        "if (value ~= false) then " +
+                            "return tonumber(value) == tonumber(ARGV[2]) and -1 or tonumber(value) - tonumber(ARGV[3]);" +
+                        "end;" +
+                        "return 0;",
+                Arrays.asList(getRawName(), timeoutName, channelName),
+                id, nonExpirableTimeout, System.currentTimeMillis(), getSubscribeService().getPublishCommand());
+        f = f.handle((res, e) -> {
+            if (e != null) {
+                throw new CompletionException(e);
+            }
+
+            if (res == 0) {
+                throw new CompletionException(new IllegalArgumentException("Permit with id " + permitId + " has already been released or doesn't exist"));
+            }
+            return res;
+            
+        });
+        return new CompletableFutureWrapper<>(f);
+    }
+    
+    @Override
+    public long getLeaseTime(String permitId) {
+        return get(getLeaseTimeAsync(permitId));
     }
 
     private static boolean hasOnlyNearestTimeout(List<String> ids) {

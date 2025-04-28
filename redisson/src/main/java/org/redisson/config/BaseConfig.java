@@ -72,6 +72,8 @@ public class BaseConfig<T extends BaseConfig<T>> {
 
     private CredentialsResolver credentialsResolver = new DefaultCredentialsResolver();
 
+    private int credentialsReapplyInterval = 0;
+
     /**
      * Subscriptions per Redis connection limit
      */
@@ -82,7 +84,7 @@ public class BaseConfig<T extends BaseConfig<T>> {
      */
     private String clientName;
 
-    private boolean sslEnableEndpointIdentification = true;
+    private SslVerificationMode sslVerificationMode = SslVerificationMode.STRICT;
 
     private String sslKeystoreType;
 
@@ -135,7 +137,6 @@ public class BaseConfig<T extends BaseConfig<T>> {
         setClientName(config.getClientName());
         setConnectTimeout(config.getConnectTimeout());
         setIdleConnectionTimeout(config.getIdleConnectionTimeout());
-        setSslEnableEndpointIdentification(config.isSslEnableEndpointIdentification());
         setSslProvider(config.getSslProvider());
         setSslTruststore(config.getSslTruststore());
         setSslTruststorePassword(config.getSslTruststorePassword());
@@ -155,7 +156,9 @@ public class BaseConfig<T extends BaseConfig<T>> {
         setTcpNoDelay(config.isTcpNoDelay());
         setNameMapper(config.getNameMapper());
         setCredentialsResolver(config.getCredentialsResolver());
+        setCredentialsReapplyInterval(config.getCredentialsReapplyInterval());
         setCommandMapper(config.getCommandMapper());
+        setSslVerificationMode(config.getSslVerificationMode());
         setSubscriptionTimeout(config.getSubscriptionTimeout());
     }
 
@@ -337,20 +340,25 @@ public class BaseConfig<T extends BaseConfig<T>> {
         return idleConnectionTimeout;
     }
 
+    @Deprecated
     public boolean isSslEnableEndpointIdentification() {
-        return sslEnableEndpointIdentification;
+        return this.sslVerificationMode == SslVerificationMode.STRICT;
     }
 
     /**
-     * Enables SSL endpoint identification.
-     * <p>
-     * Default is <code>true</code>
+     * Use {@link #setSslVerificationMode(SslVerificationMode)} instead.
      * 
      * @param sslEnableEndpointIdentification boolean value
      * @return config
      */
+    @Deprecated
     public T setSslEnableEndpointIdentification(boolean sslEnableEndpointIdentification) {
-        this.sslEnableEndpointIdentification = sslEnableEndpointIdentification;
+        log.warn("sslEnableEndpointIdentification setting is deprecated. Use sslVerificationMode setting instead.");
+        if (sslEnableEndpointIdentification) {
+            this.sslVerificationMode = SslVerificationMode.STRICT;
+        } else {
+            this.sslVerificationMode = SslVerificationMode.NONE;
+        }
         return (T) this;
     }
 
@@ -608,6 +616,24 @@ public class BaseConfig<T extends BaseConfig<T>> {
         return (T) this;
     }
 
+    public int getCredentialsReapplyInterval() {
+        return credentialsReapplyInterval;
+    }
+
+    /**
+     * Defines Credentials resolver invoke interval for Valkey or Redis server authentication.
+     * <code>0</code> means disable.
+     * <p>
+     * Default is <code>0</code>
+     *
+     * @param credentialsReapplyInterval time in milliseconds
+     * @return config
+     */
+    public T setCredentialsReapplyInterval(int credentialsReapplyInterval) {
+        this.credentialsReapplyInterval = credentialsReapplyInterval;
+        return (T) this;
+    }
+
     public String getSslKeystoreType() {
         return sslKeystoreType;
     }
@@ -637,9 +663,9 @@ public class BaseConfig<T extends BaseConfig<T>> {
      * @param sslCiphers ciphers
      * @return config
      */
-    public BaseConfig<T> setSslCiphers(String[] sslCiphers) {
+    public T setSslCiphers(String[] sslCiphers) {
         this.sslCiphers = sslCiphers;
-        return this;
+        return (T) this;
     }
 
     public TrustManagerFactory getSslTrustManagerFactory() {
@@ -654,9 +680,9 @@ public class BaseConfig<T extends BaseConfig<T>> {
      * @param trustManagerFactory trust manager value
      * @return config
      */
-    public BaseConfig<T> setSslTrustManagerFactory(TrustManagerFactory trustManagerFactory) {
+    public T setSslTrustManagerFactory(TrustManagerFactory trustManagerFactory) {
         this.sslTrustManagerFactory = trustManagerFactory;
-        return this;
+        return (T) this;
     }
 
     public KeyManagerFactory getSslKeyManagerFactory() {
@@ -687,8 +713,27 @@ public class BaseConfig<T extends BaseConfig<T>> {
      * @param commandMapper Redis command name mapper object
      * @return config
      */
-    public BaseConfig<T> setCommandMapper(CommandMapper commandMapper) {
+    public T setCommandMapper(CommandMapper commandMapper) {
         this.commandMapper = commandMapper;
-        return this;
+        return (T) this;
     }
+
+    public SslVerificationMode getSslVerificationMode() {
+        return sslVerificationMode;
+    }
+
+    /**
+     * Defines SSL verification mode, which prevents man-in-the-middle attacks.
+     *
+     * <p>
+     * Default is <code>SslVerificationMode.STRICT</code>
+     *
+     * @param sslVerificationMode
+     * @return
+     */
+    public T setSslVerificationMode(SslVerificationMode sslVerificationMode) {
+        this.sslVerificationMode = sslVerificationMode;
+        return (T) this;
+    }
+
 }

@@ -24,7 +24,7 @@ import org.redisson.config.*;
  */
 public class SingleConnectionManager extends MasterSlaveConnectionManager {
 
-    public SingleConnectionManager(SingleServerConfig cfg, Config configCopy) {
+    SingleConnectionManager(SingleServerConfig cfg, Config configCopy) {
         super(create(cfg), configCopy);
     }
 
@@ -32,7 +32,6 @@ public class SingleConnectionManager extends MasterSlaveConnectionManager {
         MasterSlaveServersConfig newconfig = new MasterSlaveServersConfig();
         
         newconfig.setPingConnectionInterval(cfg.getPingConnectionInterval());
-        newconfig.setSslEnableEndpointIdentification(cfg.isSslEnableEndpointIdentification());
         newconfig.setSslProvider(cfg.getSslProvider());
         newconfig.setSslKeystoreType(cfg.getSslKeystoreType());
         newconfig.setSslTruststore(cfg.getSslTruststore());
@@ -71,7 +70,9 @@ public class SingleConnectionManager extends MasterSlaveConnectionManager {
         newconfig.setTcpNoDelay(cfg.isTcpNoDelay());
         newconfig.setNameMapper(cfg.getNameMapper());
         newconfig.setCredentialsResolver(cfg.getCredentialsResolver());
+        newconfig.setCredentialsReapplyInterval(cfg.getCredentialsReapplyInterval());
         newconfig.setCommandMapper(cfg.getCommandMapper());
+        newconfig.setSslVerificationMode(cfg.getSslVerificationMode());
         newconfig.setSubscriptionTimeout(cfg.getSubscriptionTimeout());
 
         return newconfig;

@@ -75,8 +75,16 @@ public class RedissonPriorityBlockingQueue<V> extends RedissonPriorityQueue<V> i
     }
 
     protected <T> void takeAsync(CompletableFuture<V> result, long delay, long timeoutInMicro, RedisCommand<T> command, Object... params) {
+        if (result.isDone()) {
+            return;
+        }
+
         long start = System.currentTimeMillis();
         getServiceManager().newTimeout(t -> {
+            if (result.isDone()) {
+                return;
+            }
+
             RFuture<V> future = wrapLockedAsync(command, params);
             future.whenComplete((res, e) -> {
                     if (e != null && !(e instanceof RedisConnectionException)) {
@@ -149,6 +157,11 @@ public class RedissonPriorityBlockingQueue<V> extends RedissonPriorityQueue<V> i
     }
 
     @Override
+    public Entry<String, V> pollLastFromAnyWithName(Duration timeout, String... queueNames) throws InterruptedException {
+        throw new UnsupportedOperationException("use poll method");
+    }
+
+    @Override
     public RFuture<Map<String, List<V>>> pollFirstFromAnyAsync(Duration duration, int count, String... queueNames) {
         throw new UnsupportedOperationException("use poll method");
     }
@@ -217,7 +230,7 @@ public class RedissonPriorityBlockingQueue<V> extends RedissonPriorityQueue<V> i
             throw new NullPointerException();
         }
 
-        return commandExecutor.evalWriteAsync(getRawName(), codec, new RedisCommand<Object>("EVAL", new ListDrainToDecoder(c)),
+        return commandExecutor.evalWriteNoRetryAsync(getRawName(), codec, new RedisCommand<Object>("EVAL", new ListDrainToDecoder(c)),
               "local vals = redis.call('lrange', KEYS[1], 0, -1); " +
               "redis.call('ltrim', KEYS[1], -1, 0); " +
               "return vals", Collections.<Object>singletonList(getRawName()));
@@ -242,7 +255,7 @@ public class RedissonPriorityBlockingQueue<V> extends RedissonPriorityQueue<V> i
         if (c == null) {
             throw new NullPointerException();
         }
-        return commandExecutor.evalWriteAsync(getRawName(), codec, new RedisCommand<Object>("EVAL", new ListDrainToDecoder(c)),
+        return commandExecutor.evalWriteNoRetryAsync(getRawName(), codec, new RedisCommand<Object>("EVAL", new ListDrainToDecoder(c)),
                 "local elemNum = math.min(ARGV[1], redis.call('llen', KEYS[1])) - 1;" +
                         "local vals = redis.call('lrange', KEYS[1], 0, elemNum); " +
                         "redis.call('ltrim', KEYS[1], elemNum + 1, -1); " +
@@ -280,6 +293,11 @@ public class RedissonPriorityBlockingQueue<V> extends RedissonPriorityQueue<V> i
 
     @Override
     public RFuture<Entry<String, V>> pollFromAnyWithNameAsync(Duration timeout, String... queueNames) {
+        throw new UnsupportedOperationException("use poll method");
+    }
+
+    @Override
+    public RFuture<Entry<String, V>> pollLastFromAnyWithNameAsync(Duration timeout, String... queueNames) {
         throw new UnsupportedOperationException("use poll method");
     }
 

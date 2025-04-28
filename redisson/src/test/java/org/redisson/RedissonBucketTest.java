@@ -6,14 +6,14 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.redisson.api.DeletedObjectListener;
-import org.redisson.api.ExpiredObjectListener;
-import org.redisson.api.RBucket;
-import org.redisson.api.RedissonClient;
+import org.redisson.api.*;
 import org.redisson.api.listener.SetObjectListener;
 import org.redisson.api.listener.TrackingListener;
 import org.redisson.api.options.PlainOptions;
 import org.redisson.client.RedisResponseTimeoutException;
+import org.redisson.client.codec.IntegerCodec;
+import org.redisson.client.codec.LongCodec;
+import org.redisson.client.codec.StringCodec;
 import org.redisson.config.Config;
 import org.redisson.config.Protocol;
 import org.redisson.config.ReadMode;
@@ -124,6 +124,11 @@ public class RedissonBucketTest extends RedisDockerTest {
 
             b.rename("test347834");
             assertThat(b.getName()).isEqualTo("test347834");
+
+            RBucket<String> b2 = rc.getBucket("12324");
+            b2.set("111");
+
+            b.rename("12324");
 
             RBucket<String> bs = rc.getBucket(b.getName());
             assertThat(bs.get()).isEqualTo("123");
@@ -290,6 +295,58 @@ public class RedissonBucketTest extends RedisDockerTest {
         Thread.sleep(5000);
 
         assertThat(al.getIdleTime()).isBetween(4L, 6L);
+    }
+
+    @Test
+    public void testReferenceCount() {
+        RBucket<Integer> al = redisson.getBucket("test");
+        assertThat(al.getReferenceCount()).isEqualTo(0);
+
+        al.set(10000);
+        assertThat(al.getReferenceCount()).isEqualTo(1);
+    }
+
+    @Test
+    public void testAccessFrequency() {
+        testWithParams(redisson -> {
+            RBucket<Integer> al = redisson.getBucket("test");
+            assertThat(al.getAccessFrequency()).isEqualTo(0);
+            al.set(10000);
+            al.get();
+            assertThat(al.getAccessFrequency()).isGreaterThan(1);
+        }, MAXMEMORY_POLICY, "allkeys-lfu");
+    }
+
+    @Test
+    public void testInternalEncoding() {
+        RBucket<Integer> al = redisson.getBucket("test");
+        assertThat(al.getInternalEncoding()).isEqualTo(ObjectEncoding.NULL);
+        al.set(123);
+        assertThat(al.getInternalEncoding()).isEqualTo(ObjectEncoding.EMBSTR);
+
+        RList<String> list=redisson.getList("list");
+        list.addAll(Arrays.asList("a","b","c"));
+        assertThat(list.getInternalEncoding()).isEqualTo(ObjectEncoding.LISTPACK);
+
+        RMap<Integer, String> map = redisson.getMap("map");
+        map.put(1, "12");
+        map.put(2, "33");
+        map.put(3, "43");
+        assertThat(map.getInternalEncoding()).isEqualTo(ObjectEncoding.LISTPACK);
+
+        RSet<Integer> set = redisson.getSet("set", IntegerCodec.INSTANCE);
+        set.add(1);
+        set.add(2);
+        set.add(3);
+        assertThat(set.getInternalEncoding()).isEqualTo(ObjectEncoding.INTSET);
+
+        RSortedSet<Long> sortedSet = redisson.getSortedSet("sortedSet", LongCodec.INSTANCE);
+        sortedSet.add(2L);
+        sortedSet.add(0L);
+        sortedSet.add(1L);
+        sortedSet.add(5L);
+        assertThat(sortedSet.getInternalEncoding()).isEqualTo(ObjectEncoding.LISTPACK);
+
     }
 
     @Test
@@ -728,6 +785,23 @@ public class RedissonBucketTest extends RedisDockerTest {
         bucket.delete();
 
         Assertions.assertFalse(bucket.isExists());
+    }
+
+    @Test
+    public void testCommon() {
+        RBucket<String> bucket1 = redisson.getBucket("test1", StringCodec.INSTANCE);
+        bucket1.set("123243411");
+        RBucket<String> bucket2 = redisson.getBucket("test2", StringCodec.INSTANCE);
+        bucket2.set("aaa232fhdjal11");
+
+        assertThat(bucket1.findCommon("test2")).isEqualTo("23211");
+        assertThat(bucket1.findCommonLength("test2")).isEqualTo(5);
+
+        bucket1.set("tteq");
+        bucket2.set("dfdafsdf");
+
+        assertThat(bucket1.findCommon("test2")).isEmpty();
+        assertThat(bucket1.findCommonLength("test2")).isEqualTo(0);
     }
 
 }

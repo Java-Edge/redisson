@@ -1,22 +1,60 @@
 package org.redisson;
 
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RBlockingQueue;
 import org.redisson.api.RFuture;
+import org.redisson.api.RPriorityBlockingQueue;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
+import org.redisson.misc.RedisURI;
 import org.testcontainers.containers.GenericContainer;
 
+import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Comparator;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class RedissonPriorityBlockingQueueTest extends RedissonBlockingQueueTest {
+
+    @Test
+    public void testLambda() {
+        RPriorityBlockingQueue<RedisURI> priorityQueue = redisson.getPriorityBlockingQueue("anyQueue");
+        Assertions.assertThrowsExactly(IllegalArgumentException.class, () -> {
+            priorityQueue.trySetComparator(Comparator.comparing(RedisURI::getHost));
+        });
+    }
+
+    @Test
+    public void testTakeInterrupted() throws InterruptedException {
+        AtomicBoolean interrupted = new AtomicBoolean();
+
+        Thread t = new Thread(() -> {
+            try {
+                RBlockingQueue<Integer> queue1 = getQueue(redisson);
+                queue1.take();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+            }
+        });
+
+        t.start();
+        t.join(1000);
+
+        t.interrupt();
+        Awaitility.await().atMost(Duration.ofSeconds(1)).untilTrue(interrupted);
+
+        RBlockingQueue<Integer> q = getQueue(redisson);
+        q.add(1);
+        Thread.sleep(1000);
+        assertThat(q.contains(1)).isTrue();
+    }
 
     @Override
     <T> RBlockingQueue<T> getQueue() {

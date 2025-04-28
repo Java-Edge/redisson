@@ -16,7 +16,7 @@
 package org.redisson.client;
 
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.DuplexChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.resolver.AddressResolverGroup;
 import io.netty.util.Timer;
@@ -44,7 +44,7 @@ public class RedisClientConfig {
     private ExecutorService executor;
     private EventLoopGroup group;
     private AddressResolverGroup<InetSocketAddress> resolverGroup;
-    private Class<? extends SocketChannel> socketChannelClass = NioSocketChannel.class;
+    private Class<? extends DuplexChannel> socketChannelClass = NioSocketChannel.class;
     private int connectTimeout = 10000;
     private int commandTimeout = 10000;
 
@@ -63,7 +63,7 @@ public class RedisClientConfig {
     private boolean tcpNoDelay;
     
     private String sslHostname;
-    private boolean sslEnableEndpointIdentification = true;
+    private SslVerificationMode sslVerificationMode = SslVerificationMode.STRICT;
     private SslProvider sslProvider = SslProvider.JDK;
     private String sslKeystoreType;
     private URL sslTruststore;
@@ -76,6 +76,7 @@ public class RedisClientConfig {
     private KeyManagerFactory sslKeyManagerFactory;
     private NettyHook nettyHook = new DefaultNettyHook();
     private CredentialsResolver credentialsResolver = new DefaultCredentialsResolver();
+    private int credentialsReapplyInterval;
     private Consumer<InetSocketAddress> connectedListener;
     private Consumer<InetSocketAddress> disconnectedListener;
 
@@ -108,7 +109,6 @@ public class RedisClientConfig {
         this.pingConnectionInterval = config.pingConnectionInterval;
         this.keepAlive = config.keepAlive;
         this.tcpNoDelay = config.tcpNoDelay;
-        this.sslEnableEndpointIdentification = config.sslEnableEndpointIdentification;
         this.sslProvider = config.sslProvider;
         this.sslTruststore = config.sslTruststore;
         this.sslTruststorePassword = config.sslTruststorePassword;
@@ -119,6 +119,7 @@ public class RedisClientConfig {
         this.resolverGroup = config.resolverGroup;
         this.sslHostname = config.sslHostname;
         this.credentialsResolver = config.credentialsResolver;
+        this.credentialsReapplyInterval = config.credentialsReapplyInterval;
         this.connectedListener = config.connectedListener;
         this.disconnectedListener = config.disconnectedListener;
         this.sslKeyManagerFactory = config.sslKeyManagerFactory;
@@ -131,6 +132,7 @@ public class RedisClientConfig {
         this.tcpUserTimeout = config.tcpUserTimeout;
         this.protocol = config.protocol;
         this.sslKeystoreType = config.sslKeystoreType;
+        this.sslVerificationMode = config.sslVerificationMode;
     }
 
     public NettyHook getNettyHook() {
@@ -150,7 +152,7 @@ public class RedisClientConfig {
     }
 
     public RedisClientConfig setAddress(String host, int port) {
-        this.address = new RedisURI("redis://" + host + ":" + port);
+        this.address = new RedisURI(RedisURI.REDIS_PROTOCOL + host + ":" + port);
         return this;
     }
     public RedisClientConfig setAddress(String address) {
@@ -197,10 +199,10 @@ public class RedisClientConfig {
         return this;
     }
     
-    public Class<? extends SocketChannel> getSocketChannelClass() {
+    public Class<? extends DuplexChannel> getSocketChannelClass() {
         return socketChannelClass;
     }
-    public RedisClientConfig setSocketChannelClass(Class<? extends SocketChannel> socketChannelClass) {
+    public RedisClientConfig setSocketChannelClass(Class<? extends DuplexChannel> socketChannelClass) {
         this.socketChannelClass = socketChannelClass;
         return this;
     }
@@ -260,12 +262,18 @@ public class RedisClientConfig {
         this.sslTruststorePassword = sslTruststorePassword;
         return this;
     }
-    
+
+    @Deprecated
     public boolean isSslEnableEndpointIdentification() {
-        return sslEnableEndpointIdentification;
+        return this.sslVerificationMode == SslVerificationMode.STRICT;
     }
+    @Deprecated
     public RedisClientConfig setSslEnableEndpointIdentification(boolean enableEndpointIdentification) {
-        this.sslEnableEndpointIdentification = enableEndpointIdentification;
+        if (enableEndpointIdentification) {
+            this.sslVerificationMode = SslVerificationMode.STRICT;
+        } else {
+            this.sslVerificationMode = SslVerificationMode.NONE;
+        }
         return this;
     }
 
@@ -408,6 +416,15 @@ public class RedisClientConfig {
         return this;
     }
 
+    public int getCredentialsReapplyInterval() {
+        return credentialsReapplyInterval;
+    }
+
+    public RedisClientConfig setCredentialsReapplyInterval(int credentialsReapplyInterval) {
+        this.credentialsReapplyInterval = credentialsReapplyInterval;
+        return this;
+    }
+
     public Consumer<InetSocketAddress> getConnectedListener() {
         return connectedListener;
     }
@@ -475,6 +492,14 @@ public class RedisClientConfig {
 
     public RedisClientConfig setSslKeystoreType(String sslKeystoreType) {
         this.sslKeystoreType = sslKeystoreType;
+        return this;
+    }
+
+    public SslVerificationMode getSslVerificationMode() {
+        return sslVerificationMode;
+    }
+    public RedisClientConfig setSslVerificationMode(SslVerificationMode sslVerificationMode) {
+        this.sslVerificationMode = sslVerificationMode;
         return this;
     }
 }

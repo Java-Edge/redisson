@@ -19,6 +19,8 @@ import org.redisson.api.listener.MessageListener;
 import org.redisson.client.RedisPubSubListener;
 import org.redisson.client.protocol.pubsub.PubSubType;
 
+import java.util.Set;
+
 /**
  *
  * @author Nikita Koksharov
@@ -28,63 +30,48 @@ import org.redisson.client.protocol.pubsub.PubSubType;
 public class PubSubMessageListener<V> implements RedisPubSubListener<Object> {
 
     private final MessageListener<V> listener;
-    private final String name;
+    private final Set<String> names;
     private final Class<V> type;
+    private Runnable callback;
 
-    public String getName() {
-        return name;
-    }
-
-    public PubSubMessageListener(Class<V> type, MessageListener<V> listener, String name) {
+    public PubSubMessageListener(Class<V> type, MessageListener<V> listener, Set<String> names) {
         super();
         this.type = type;
         this.listener = listener;
-        this.name = name;
+        this.names = names;
     }
 
-    @Override
-    @SuppressWarnings("AvoidInlineConditionals")
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((listener == null) ? 0 : listener.hashCode());
-        return result;
+    public PubSubMessageListener(Class<V> type, MessageListener<V> listener, Set<String> names, Runnable callback) {
+        super();
+        this.type = type;
+        this.listener = listener;
+        this.names = names;
+        this.callback = callback;
     }
 
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (getClass() != obj.getClass())
-            return false;
-        PubSubMessageListener other = (PubSubMessageListener) obj;
-        if (listener == null) {
-            if (other.listener != null)
-                return false;
-        } else if (!listener.equals(other.listener))
-            return false;
-        return true;
-    }
-    
     public MessageListener<V> getListener() {
         return listener;
     }
-    
+
     @Override
     public void onMessage(CharSequence channel, Object message) {
         // could be subscribed to multiple channels
-        if (name.equals(channel.toString()) && type.isInstance(message)) {
+        if (names.contains(channel.toString()) && type.isInstance(message)) {
             listener.onMessage(channel, (V) message);
+            if (callback != null) {
+                callback.run();
+            }
         }
     }
 
     @Override
     public void onPatternMessage(CharSequence pattern, CharSequence channel, Object message) {
         // could be subscribed to multiple channels
-        if (name.equals(pattern.toString()) && type.isInstance(message)) {
+        if (names.contains(pattern.toString()) && type.isInstance(message)) {
             listener.onMessage(channel, (V) message);
+            if (callback != null) {
+                callback.run();
+            }
         }
     }
 

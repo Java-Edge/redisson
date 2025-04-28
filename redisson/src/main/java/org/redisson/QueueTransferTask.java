@@ -22,7 +22,6 @@ import org.redisson.api.RTopic;
 import org.redisson.api.listener.BaseStatusListener;
 import org.redisson.api.listener.MessageListener;
 import org.redisson.connection.ServiceManager;
-import org.redisson.misc.WrappedLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,11 +58,10 @@ public abstract class QueueTransferTask {
         
     }
     
-    private int usage = 1;
+    private volatile int usage = 1;
     private final AtomicReference<TimeoutTask> lastTimeout = new AtomicReference<TimeoutTask>();
     private final ServiceManager serviceManager;
-    private final WrappedLock lock = new WrappedLock();
-    
+
     public QueueTransferTask(ServiceManager serviceManager) {
         super();
         this.serviceManager = serviceManager;
@@ -100,16 +98,24 @@ public abstract class QueueTransferTask {
     
     public void stop() {
         RTopic schedulerTopic = getTopic();
-        schedulerTopic.removeListener(messageListenerId);
-        schedulerTopic.removeListener(statusListenerId);
+        schedulerTopic.removeListener(messageListenerId, statusListenerId);
+
+        TimeoutTask oldTimeout = lastTimeout.get();
+        if (oldTimeout != null) {
+            oldTimeout.getTask().cancel();
+        }
     }
 
     private void scheduleTask(final Long startTime) {
-        TimeoutTask oldTimeout = lastTimeout.get();
+        if (usage == 0) {
+            return;
+        }
+
         if (startTime == null) {
             return;
         }
-        
+
+        TimeoutTask oldTimeout = lastTimeout.get();
         if (oldTimeout != null) {
             oldTimeout.getTask().cancel();
         }
@@ -127,9 +133,8 @@ public abstract class QueueTransferTask {
                     }
                 }
             }, delay, TimeUnit.MILLISECONDS);
-            if (!lastTimeout.compareAndSet(oldTimeout, new TimeoutTask(startTime, timeout))) {
-                timeout.cancel();
-            }
+            
+            lastTimeout.compareAndSet(oldTimeout, new TimeoutTask(startTime, timeout));
         } else {
             pushTask();
         }
@@ -140,6 +145,10 @@ public abstract class QueueTransferTask {
     protected abstract RFuture<Long> pushTaskAsync();
     
     private void pushTask() {
+        if (usage == 0) {
+            return;
+        }
+
         RFuture<Long> startTimeFuture = pushTaskAsync();
         startTimeFuture.whenComplete((res, e) -> {
             if (e != null) {
@@ -157,7 +166,4 @@ public abstract class QueueTransferTask {
         });
     }
 
-    public WrappedLock getLock() {
-        return lock;
-    }
 }

@@ -52,6 +52,7 @@ public class RedissonSessionManager extends ManagerBase {
     
     protected RedissonClient redisson;
     private String configPath;
+    private Config config;
     
     private ReadMode readMode = ReadMode.REDIS;
     private UpdateMode updateMode = UpdateMode.DEFAULT;
@@ -158,7 +159,7 @@ public class RedissonSessionManager extends ManagerBase {
     public RTopic getTopic() {
         String separator = keyPrefix == null || keyPrefix.isEmpty() ? "" : ":";
         final String name = keyPrefix + separator + "redisson:tomcat_session_updates:" + getContext().getName();
-        PublishSubscribeService ss = ((Redisson) redisson).getConnectionManager().getSubscribeService();
+        PublishSubscribeService ss = ((Redisson) redisson).getCommandExecutor().getConnectionManager().getSubscribeService();
         if (ss.isShardingSupported()) {
             return redisson.getShardedTopic(name);
         }
@@ -225,7 +226,8 @@ public class RedissonSessionManager extends ManagerBase {
     public void remove(Session session, boolean update) {
         super.remove(session, update);
         
-        if (session.getIdInternal() != null) {
+        if (session.getIdInternal() != null
+                && !redisson.isShuttingDown()) {
             ((RedissonSession)session).delete();
         }
     }
@@ -322,7 +324,9 @@ public class RedissonSessionManager extends ManagerBase {
                             
                             if (msg instanceof AttributeUpdateMessage) {
                                 AttributeUpdateMessage m = (AttributeUpdateMessage)msg;
-                                session.superSetAttribute(m.getName(), m.getValue(codecToUse.getMapValueDecoder()), true);
+                                Map<String, Object> attrs = new HashMap<>();
+                                attrs.put(m.getName(), m.getValue(codecToUse.getMapValueDecoder()));
+                                session.load(attrs);
                             }
                         } else {
                             if (msg instanceof SessionCreatedMessage) {
@@ -354,19 +358,20 @@ public class RedissonSessionManager extends ManagerBase {
     }
 
     protected RedissonClient buildClient() throws LifecycleException {
-        Config config = null;
-        try {
-            config = Config.fromYAML(new File(configPath), getClass().getClassLoader());
-        } catch (IOException e) {
-            // trying next format
+        if (config == null) {
             try {
-                config = Config.fromJSON(new File(configPath), getClass().getClassLoader());
-            } catch (IOException e1) {
-                log.error("Can't parse json config " + configPath, e);
-                throw new LifecycleException("Can't parse yaml config " + configPath, e1);
+                config = Config.fromYAML(new File(configPath), getClass().getClassLoader());
+            } catch (IOException e) {
+                // trying next format
+                try {
+                    config = Config.fromJSON(new File(configPath), getClass().getClassLoader());
+                } catch (IOException e1) {
+                    log.error("Can't parse json config " + configPath, e);
+                    throw new LifecycleException("Can't parse yaml config " + configPath, e1);
+                }
             }
         }
-        
+
         try {
             return Redisson.create(config);
         } catch (Exception e) {

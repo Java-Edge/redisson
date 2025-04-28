@@ -601,7 +601,47 @@ public class RedissonLiveObjectServiceTest extends RedisDockerTest {
                                                                      Conditions.and(Conditions.eq("name1", "test41"), Conditions.lt("num1", 43))));
         assertThat(objects6.iterator().next().getId()).isEqualTo("4");
     }
-    
+
+    @Test
+    public void testIndexRemoval2() throws InterruptedException {
+        RLiveObjectService liveObjectService = redisson.getLiveObjectService();
+
+        TestIndexed myEntity = new TestIndexed("id");
+        myEntity.setName1("1");
+
+        liveObjectService.persist(myEntity);
+
+        CountDownLatch latch = new CountDownLatch(1);
+
+        Runnable setterRunnable = () -> {
+            while (true) {
+                TestIndexed liveEntity = liveObjectService.get(TestIndexed.class, "id");
+                liveEntity.setName1("2");
+            }
+        };
+        Runnable getterRunnable = () -> {
+            int steps = 1;
+            while (true) {
+                final TestIndexed liveEntity = liveObjectService.get(TestIndexed.class, "id");
+                if (liveEntity.getName1() == null) {
+                    System.out.println("IS NULL ON STEP " + steps);
+                    latch.countDown();
+                }
+                steps++;
+            }
+        };
+
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            pool.submit(setterRunnable);
+            pool.submit(getterRunnable);
+
+            assertThat(latch.await(5, TimeUnit.SECONDS)).isFalse();
+
+            pool.shutdownNow();
+        }
+    }
+
+
     @Test
     public void testFindGe() {
         RLiveObjectService s = redisson.getLiveObjectService();
@@ -1380,6 +1420,7 @@ public class RedissonLiveObjectServiceTest extends RedisDockerTest {
         assertNotNull(service.get(TestClass.class, new ObjectId(100)));
         persisted.setCode("CODE");
         assertNotNull(service.get(TestClass.class, new ObjectId(100)));
+        assertThat(service.get(TestClass.class, new ObjectId(101))).isNull();
     }
 
     @Test
@@ -1754,7 +1795,7 @@ public class RedissonLiveObjectServiceTest extends RedisDockerTest {
                 throw new RuntimeException(e);
             }
             assertThat(redisson.getKeys().count()).isZero();
-        }, NOTIFY_KEYSPACE_EVENTS, "Kx");
+        }, NOTIFY_KEYSPACE_EVENTS, "KEA");
     }
 
     @Test
@@ -2395,13 +2436,17 @@ public class RedissonLiveObjectServiceTest extends RedisDockerTest {
 
         objects.clear();
         for (int i = 0; i < objectsAmount; i++) {
-            TestREntity e = (TestREntity) attachedObjects.get(i);
+            TestREntity e = new TestREntity();
             e.setName("" + i);
             e.setValue("value" + i*1000);
             objects.add(e);
         }
         List<Object> attachedObjects2 = s.merge(objects.toArray());
         assertThat(attachedObjects2).hasSize(objectsAmount);
+
+        TestREntity e = (TestREntity) attachedObjects2.get(1);
+        assertThat(e.getName()).isNotNull();
+        assertThat(e.getValue()).isEqualTo("value1000");
 
         assertThat(redisson.getKeys().count()).isEqualTo(objectsAmount);
     }
@@ -2421,6 +2466,14 @@ public class RedissonLiveObjectServiceTest extends RedisDockerTest {
         }
         List<Object> attachedObjects = s.persist(objects.toArray());
         assertThat(attachedObjects).hasSize(objectsAmount);
+
+        TestREntity e = (TestREntity) attachedObjects.get(0);
+        assertThat(e.getName()).isNotNull();
+        e.setValue("test");
+        assertThat(e.getValue()).isEqualTo("test");
+
+        TestREntity rr = s.get(TestREntity.class, "0");
+        assertThat(rr.getValue()).isEqualTo("test");
 
         assertThat(redisson.getKeys().count()).isEqualTo(objectsAmount);
     }

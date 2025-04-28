@@ -19,6 +19,11 @@ import org.redisson.api.listener.StatusListener;
 import org.redisson.client.RedisPubSubListener;
 import org.redisson.client.protocol.pubsub.PubSubType;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /**
  *
  * @author Nikita Koksharov
@@ -27,38 +32,14 @@ import org.redisson.client.protocol.pubsub.PubSubType;
 public class PubSubStatusListener implements RedisPubSubListener<Object> {
 
     private final StatusListener listener;
-    private final String name;
+    private final String[] names;
+    private final Set<String> notified = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
-    public PubSubStatusListener(StatusListener listener, String name) {
+    public PubSubStatusListener(StatusListener listener, String... names) {
         super();
         this.listener = listener;
-        this.name = name;
-    }
-
-    @Override
-    @SuppressWarnings("AvoidInlineConditionals")
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((listener == null) ? 0 : listener.hashCode());
-        return result;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (getClass() != obj.getClass())
-            return false;
-        PubSubStatusListener other = (PubSubStatusListener) obj;
-        if (listener == null) {
-            if (other.listener != null)
-                return false;
-        } else if (!listener.equals(other.listener))
-            return false;
-        return true;
+        this.names = names;
+        notified.addAll(Arrays.asList(names));
     }
 
     @Override
@@ -71,17 +52,19 @@ public class PubSubStatusListener implements RedisPubSubListener<Object> {
 
     @Override
     public void onStatus(PubSubType type, CharSequence channel) {
-        if (channel.toString().equals(name)) {
+        notified.remove(channel.toString());
+        if (notified.isEmpty()) {
             if (type == PubSubType.SUBSCRIBE || type == PubSubType.SSUBSCRIBE || type == PubSubType.PSUBSCRIBE) {
                 listener.onSubscribe(channel.toString());
+                notified.addAll(Arrays.asList(names));
             } else if (type == PubSubType.UNSUBSCRIBE || type == PubSubType.SUNSUBSCRIBE || type == PubSubType.PUNSUBSCRIBE) {
                 listener.onUnsubscribe(channel.toString());
             }
         }
     }
 
-    public String getName() {
-        return name;
+    public String[] getNames() {
+        return names;
     }
 
     public StatusListener getListener() {

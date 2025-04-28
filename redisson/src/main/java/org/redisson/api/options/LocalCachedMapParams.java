@@ -40,6 +40,9 @@ public final class LocalCachedMapParams<K, V> extends BaseMapOptions<LocalCached
 
     private ExpirationEventPolicy expirationEventPolicy = ExpirationEventPolicy.SUBSCRIBE_WITH_KEYEVENT_PATTERN;
 
+    private boolean useObjectAsCacheKey;
+    private boolean useTopicPattern;
+
     LocalCachedMapParams(String name) {
         this.name = name;
     }
@@ -232,11 +235,31 @@ public final class LocalCachedMapParams<K, V> extends BaseMapOptions<LocalCached
         return this;
     }
 
+    @Override
+    public LocalCachedMapOptions<K, V> useObjectAsCacheKey(boolean useObjectAsCacheKey) {
+        this.useObjectAsCacheKey = useObjectAsCacheKey;
+        return this;
+    }
+
+    @Override
+    public LocalCachedMapOptions<K, V> useTopicPattern(boolean value) {
+        this.useTopicPattern = value;
+        return this;
+    }
+
     public ExpirationEventPolicy getExpirationEventPolicy() {
         return expirationEventPolicy;
     }
 
     public String getName() {
         return name;
+    }
+
+    public boolean isUseObjectAsCacheKey() {
+        return useObjectAsCacheKey;
+    }
+
+    public boolean isUseTopicPattern() {
+        return useTopicPattern;
     }
 }

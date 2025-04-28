@@ -22,6 +22,7 @@ import org.redisson.client.codec.Codec;
 import org.redisson.codec.JsonCodec;
 import org.redisson.config.Config;
 
+import java.util.Collection;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -511,7 +512,82 @@ public interface RedissonClient {
      * @return ListMultimapCache object
      */
     <K, V> RListMultimapCache<K, V> getListMultimapCache(PlainOptions options);
-    
+
+    /**
+     * Returns local cached map cache instance by name.
+     * Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param options - local map options
+     * @return LocalCachedMapCache object
+     */
+    <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, LocalCachedMapCacheOptions<K, V> options);
+
+    /**
+     * Returns local cached map cache instance by name using provided codec.
+     * Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param codec - codec for keys and values
+     * @param options - local map options
+     * @return LocalCachedMap object
+     */
+    <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, Codec codec, LocalCachedMapCacheOptions<K, V> options);
+
+    /**
+     * Returns List based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(String name);
+
+    /**
+     * Returns List based Multimap instance by name
+     * using provided codec for both map keys and values.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @param codec codec for keys and values
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(String name, Codec codec);
+
+    /**
+     * Returns List based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param options instance options
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(PlainOptions options);
+
     /**
      * Returns local cached map instance by name.
      * Configured by parameters of options-object. 
@@ -723,6 +799,56 @@ public interface RedissonClient {
     <K, V> RSetMultimapCache<K, V> getSetMultimapCache(PlainOptions options);
 
     /**
+     * Returns Set based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(String name);
+
+    /**
+     * Returns Set based Multimap instance by name
+     * using provided codec for both map keys and values.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @param codec codec for keys and values
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(String name, Codec codec);
+
+    /**
+     * Returns Set based Multimap instance with specified <code>options</code>.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param options instance options
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(PlainOptions options);
+
+    /**
      * Returns semaphore instance by name
      *
      * @param name name of object
@@ -831,7 +957,14 @@ public interface RedissonClient {
      * @return MultiLock object
      */
     RLock getMultiLock(RLock... locks);
-    
+    /**
+     * Returns RedissonFasterMultiLock instance associated with specified <code>group</code> and <code>values</code>
+     *
+     * @param group the group of values
+     * @param values lock values
+     * @return BatchLock object
+     */
+    RLock getMultiLock(String group, Collection<Object> values);
     /*
      * Use getLock() or getFencedLock() method instead.
      */
@@ -1825,6 +1958,21 @@ public interface RedissonClient {
      * @return LiveObjectService object
      */
     RLiveObjectService getLiveObjectService(LiveObjectOptions options);
+
+    /**
+     * Returns client side caching facade interface with the specified <code>options</code>.
+     * <p>
+     * Requires <b>Redis 5.0.0 and higher.</b>
+     * <p>
+     * <strong>
+     * NOTE: client side caching feature invalidates whole Map per entry change which is ineffective.
+     * Use local cached <a href="https://redisson.org/docs/data-and-services/collections/#eviction-local-cache-and-data-partitioning">Map</a>, <a href="https://redisson.org/docs/data-and-services/collections/#local-cache">JSON Store</a> instead.
+     * </strong>
+     *
+     * @param options client cache options
+     * @return Client side caching instance
+     */
+    RClientSideCaching getClientSideCaching(ClientSideCachingOptions options);
 
     /**
      * Returns RxJava Redisson instance

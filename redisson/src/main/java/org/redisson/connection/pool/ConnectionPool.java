@@ -29,11 +29,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
+import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Base connection pool class 
@@ -45,8 +44,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 abstract class ConnectionPool<T extends RedisConnection> {
 
     private final Logger log = LoggerFactory.getLogger(getClass());
-
-    protected final Queue<ClientConnectionsEntry> entries = new ConcurrentLinkedQueue<>();
 
     final ConnectionManager connectionManager;
 
@@ -60,23 +57,18 @@ abstract class ConnectionPool<T extends RedisConnection> {
         this.connectionManager = connectionManager;
     }
 
-    public final void addEntry(ClientConnectionsEntry entry) {
-        entries.add(entry);
-    }
-
-    public final void removeEntry(ClientConnectionsEntry entry) {
-        entries.remove(entry);
-    }
-
     protected abstract ConnectionsHolder<T> getConnectionHolder(ClientConnectionsEntry entry, boolean trackChanges);
 
     public CompletableFuture<T> get(RedisCommand<?> command, boolean trackChanges) {
+        Collection<ClientConnectionsEntry> entries = masterSlaveEntry.getAllEntries();
         List<ClientConnectionsEntry> entriesCopy = new LinkedList<>(entries);
         entriesCopy.removeIf(n -> n.isFreezed() || !isHealthy(n));
         if (!entriesCopy.isEmpty()) {
             ClientConnectionsEntry entry = config.getLoadBalancer().getEntry(entriesCopy, command);
-            log.debug("Entry {} selected as connection source", entry);
-            return acquireConnection(command, entry, trackChanges);
+            if (entry != null) {
+                log.debug("Entry {} selected as connection source", entry);
+                return acquireConnection(command, entry, trackChanges);
+            }
         }
         
         List<InetSocketAddress> failed = new LinkedList<>();
@@ -116,7 +108,7 @@ abstract class ConnectionPool<T extends RedisConnection> {
             if (e != null) {
                 if (entry.getNodeType() == NodeType.SLAVE) {
                     FailedNodeDetector detector = entry.getClient().getConfig().getFailedNodeDetector();
-                    detector.onConnectFailed();
+                    detector.onConnectFailed(e);
                     if (detector.isNodeFailed()) {
                         log.error("Redis node {} has been marked as failed according to the detection logic defined in {}",
                                         entry.getClient().getAddr(), detector);

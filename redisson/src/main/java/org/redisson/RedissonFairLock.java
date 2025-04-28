@@ -47,13 +47,9 @@ public class RedissonFairLock extends RedissonLock implements RLock {
     private final String timeoutSetName;
 
     public RedissonFairLock(CommandAsyncExecutor commandExecutor, String name) {
-        this(commandExecutor, name, 60000*5);
-    }
-
-    public RedissonFairLock(CommandAsyncExecutor commandExecutor, String name, long threadWaitTime) {
         super(commandExecutor, name);
         this.commandExecutor = commandExecutor;
-        this.threadWaitTime = threadWaitTime;
+        this.threadWaitTime = getServiceManager().getCfg().getFairLockWaitTimeout();
         threadsQueueName = prefixName("redisson_lock_queue", name);
         timeoutSetName = prefixName("redisson_lock_timeout", name);
     }
@@ -77,7 +73,7 @@ public class RedissonFairLock extends RedissonLock implements RLock {
             wait = unit.toMillis(waitTime);
         }
 
-        RFuture<Void> f = evalWriteSyncedAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_VOID,
+        RFuture<Void> f = evalWriteSyncedNoRetryAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_VOID,
                 // get the existing timeout for the thread to remove
                 "local queue = redis.call('lrange', KEYS[1], 0, -1);" +
                         // find the location in the queue where the thread is
@@ -109,7 +105,7 @@ public class RedissonFairLock extends RedissonLock implements RLock {
 
         long currentTime = System.currentTimeMillis();
         if (command == RedisCommands.EVAL_NULL_BOOLEAN) {
-            return commandExecutor.syncedEval(getRawName(), LongCodec.INSTANCE, command,
+            return commandExecutor.syncedEvalNoRetry(getRawName(), LongCodec.INSTANCE, command,
                     // remove stale threads
                     "while true do " +
                         "local firstThreadId2 = redis.call('lindex', KEYS[2], 0);" +
@@ -154,7 +150,7 @@ public class RedissonFairLock extends RedissonLock implements RLock {
         }
 
         if (command == RedisCommands.EVAL_LONG) {
-            return commandExecutor.syncedEval(getRawName(), LongCodec.INSTANCE, command,
+            return commandExecutor.syncedEvalNoRetry(getRawName(), LongCodec.INSTANCE, command,
                     // remove stale threads
                     "while true do " +
                         "local firstThreadId2 = redis.call('lindex', KEYS[2], 0);" +
@@ -218,7 +214,7 @@ public class RedissonFairLock extends RedissonLock implements RLock {
                     // threadWaitTime
                     "local lastThreadId = redis.call('lindex', KEYS[2], -1);" +
                     "local ttl;" +
-                    "if lastThreadId ~= false and lastThreadId ~= ARGV[2] then " +
+                    "if lastThreadId ~= false and lastThreadId ~= ARGV[2] and redis.call('zscore', KEYS[3], lastThreadId) ~= false then " +
                         "ttl = tonumber(redis.call('zscore', KEYS[3], lastThreadId)) - tonumber(ARGV[4]);" +
                     "else " +
                         "ttl = redis.call('pttl', KEYS[1]);" +
@@ -237,7 +233,7 @@ public class RedissonFairLock extends RedissonLock implements RLock {
 
     @Override
     protected RFuture<Boolean> unlockInnerAsync(long threadId, String requestId, int timeout) {
-        return evalWriteSyncedAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
+        return evalWriteSyncedNoRetryAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_BOOLEAN,
           "local val = redis.call('get', KEYS[5]); " +
                 "if val ~= false then " +
                     "return tonumber(val);" +

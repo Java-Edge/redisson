@@ -279,6 +279,24 @@ public class RedissonBitSet extends RedissonExpirable implements RBitSet {
     }
 
     @Override
+    public boolean[] get(long... bitIndexes) {
+        return get(getAsync(bitIndexes));
+    }
+
+    @Override
+    public RFuture<boolean[]> getAsync(long... bitIndexes) {
+        Object[] indexes = new Object[bitIndexes.length * 3 + 1];
+        int j = 0;
+        indexes[j++] = getRawName();
+        for (long l : bitIndexes) {
+            indexes[j++] = "get";
+            indexes[j++] = "u1";
+            indexes[j++] = l;
+        }
+        return commandExecutor.readAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.BITFIELD_BOOLEANS, indexes);
+    }
+
+    @Override
     public boolean set(long bitIndex) {
         return get(setAsync(bitIndex, true));
     }
@@ -314,10 +332,10 @@ public class RedissonBitSet extends RedissonExpirable implements RBitSet {
         Object[] paramArray = new Object[indexArray.length * 4 + 1];
         int j = 0;
         paramArray[j++] = getRawName();
-        for (int i = 0; i < indexArray.length; i++) {
+        for (long l : indexArray) {
             paramArray[j++] = "set";
             paramArray[j++] = "u1";
-            paramArray[j++] = indexArray[i];
+            paramArray[j++] = l;
             paramArray[j++] = val;
         }
         return commandExecutor.writeAsync(getRawName(), StringCodec.INSTANCE, RedisCommands.BITFIELD_VOID, paramArray);
@@ -427,14 +445,22 @@ public class RedissonBitSet extends RedissonExpirable implements RBitSet {
     @Override
     public RFuture<Long> lengthAsync() {
         return commandExecutor.evalReadAsync(getRawName(), LongCodec.INSTANCE, RedisCommands.EVAL_LONG,
-                "local fromBit = redis.call('bitpos', KEYS[1], 1, -1);"
-                + "local toBit = 8*(fromBit/8 + 1) - fromBit % 8;"
-                        + "for i = toBit, fromBit, -1 do "
-                            + "if redis.call('getbit', KEYS[1], i) == 1 then "
-                                + "return i+1;"
-                            + "end;"
-                       + "end;" +
-                     "return fromBit+1",
+                "local i = redis.call('bitpos', KEYS[1], 1, -1); "
+                        + "local pos = i < 0 and redis.call('bitpos', KEYS[1], 0, -1) or math.floor(i / 8) * 8; "
+                        + "while  (pos >= 0) "
+                        + "do "
+                            + "i = redis.call('bitpos', KEYS[1], 1, math.floor(pos / 8), math.floor(pos / 8)); "
+                            + "if i < 0 then "
+                                + "pos = pos - 8; "
+                            + "else "
+                                + "for j = pos + 7, pos, -1 do "
+                                    + "if redis.call('getbit', KEYS[1], j) == 1 then "
+                                        + "return j + 1; "
+                                    + "end; "
+                                + "end; "
+                            + "end; "
+                        + "end; "
+                        + "return 0; ",
                 Collections.<Object>singletonList(getRawName()));
     }
 

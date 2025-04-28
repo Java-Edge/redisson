@@ -129,6 +129,75 @@ public class RedissonMapCache<K, V> extends RedissonMap<K, V> implements RMapCac
     }
 
     @Override
+    public V computeIfAbsent(K key, Duration ttl, Function<? super K, ? extends V> mappingFunction) {
+        checkNotBatch();
+
+        checkKey(key);
+        Objects.requireNonNull(mappingFunction);
+
+        V value = get(key);
+        if (value != null) {
+            return value;
+        }
+        RLock lock = getLock(key);
+        lock.lock();
+        try {
+            value = get(key);
+            if (value == null) {
+                V newValue = mappingFunction.apply(key);
+                if (newValue != null) {
+                    V r = putIfAbsent(key, newValue, ttl.toMillis(), TimeUnit.MILLISECONDS);
+                    if (r != null) {
+                        return r;
+                    }
+                    return newValue;
+                }
+                return null;
+            }
+            return value;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    public RFuture<V> computeIfAbsentAsync(K key, Duration ttl, Function<? super K, ? extends V> mappingFunction) {
+        checkNotBatch();
+
+        checkKey(key);
+        Objects.requireNonNull(mappingFunction);
+
+        RLock lock = getLock(key);
+        long threadId = Thread.currentThread().getId();
+        CompletionStage<V> f = lock.lockAsync(threadId)
+                .thenCompose(r -> {
+                    RFuture<V> oldValueFuture = getAsync(key, threadId);
+                    return oldValueFuture.thenCompose(oldValue -> {
+                        if (oldValue != null) {
+                            return CompletableFuture.completedFuture(oldValue);
+                        }
+
+                        return CompletableFuture.supplyAsync(() -> mappingFunction.apply(key), getServiceManager().getExecutor())
+                                .thenCompose(newValue -> {
+                                    if (newValue != null) {
+                                        return putIfAbsentAsync(key, newValue, ttl.toMillis(), TimeUnit.MILLISECONDS).thenApply(rr -> {
+                                            if (rr != null) {
+                                                return rr;
+                                            }
+                                            return newValue;
+                                        });
+                                    }
+                                    return CompletableFuture.completedFuture(null);
+                                });
+                    }).whenComplete((c, e) -> {
+                        lock.unlockAsync(threadId);
+                    });
+                });
+
+        return new CompletableFutureWrapper<>(f);
+    }
+
+    @Override
     public void setMaxSize(int maxSize) {
         get(setMaxSizeAsync(maxSize));
     }
@@ -1655,12 +1724,13 @@ public class RedissonMapCache<K, V> extends RedissonMap<K, V> implements RMapCac
             return future;
         }
 
+        long threadId = Thread.currentThread().getId();
         CompletionStage<Map<K, V>> f = future.thenCompose(res -> {
             if (!res.keySet().containsAll(keys)) {
                 Set<K> newKeys = new HashSet<K>(keys);
                 newKeys.removeAll(res.keySet());
 
-                CompletionStage<Map<K, V>> ff = loadAllMapAsync(newKeys.spliterator(), false, 1);
+                CompletionStage<Map<K, V>> ff = loadAllMapAsync(newKeys.spliterator(), false, 1, threadId);
                 return ff.thenApply(map -> {
                     res.putAll(map);
                     return res;
@@ -1684,8 +1754,9 @@ public class RedissonMapCache<K, V> extends RedissonMap<K, V> implements RMapCac
                         "local currentTime = tonumber(table.remove(ARGV, 1)); " + // index is the first parameter
                         "local hasExpire = #expireHead == 2 and tonumber(expireHead[2]) <= currentTime; " +
                         "local map = {}; " +
-                        "for i = 1, #ARGV, 1 do " +
-                        "    local value = redis.call('hget', KEYS[1], ARGV[i]); " +
+                        "local values = redis.call('hmget', KEYS[1], unpack(ARGV));" +
+                        "for i = 1, #values, 1 do " +
+                        "    local value = values[i]; " +
                         "    map[i] = false;" +
                         "    if value ~= false then " +
                         "        local key = ARGV[i]; " +
@@ -2610,7 +2681,7 @@ public class RedissonMapCache<K, V> extends RedissonMap<K, V> implements RMapCac
 
         return commandExecutor.evalWriteAsync(getRawName(), codec, RedisCommands.EVAL_VOID,
                   "local currentTime = tonumber(table.remove(ARGV, 1)); " + // index is the first parameter
-                        "local publishCommand = tonumber(table.remove(ARGV, 1)); " + // index is the first parameter
+                        "local publishCommand = table.remove(ARGV, 1); " + // index is the first parameter
                   "local maxSize = tonumber(redis.call('hget', KEYS[8], 'max-size'));" +
                   "local mode = redis.call('hget', KEYS[8], 'mode'); " +
                   "for i, value in ipairs(ARGV) do "

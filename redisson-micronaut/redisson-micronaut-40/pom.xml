@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-micronaut</artifactId>
-        <version>3.34.2-SNAPSHOT</version>
+        <version>3.45.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
@@ -12,46 +12,14 @@
     <packaging>jar</packaging>
 
     <properties>
-        <micronaut.version>4.6.0</micronaut.version>
+        <micronaut.version>4.8.0</micronaut.version>
+        <main.basedir>${project.parent.parent.basedir}</main.basedir>
     </properties>
 
-    <name>Redisson/Micronaut v4.x.x integration</name>
+    <name>Redisson Micronaut v4.x.x integration</name>
 
     <build>
         <plugins>
-            <plugin>
-                <groupId>com.mycila</groupId>
-                <artifactId>license-maven-plugin</artifactId>
-                <version>4.5</version>
-                <configuration>
-                    <basedir>${basedir}</basedir>
-                    <header>${basedir}/../../header.txt</header>
-                    <quiet>false</quiet>
-                    <failIfMissing>true</failIfMissing>
-                    <aggregate>false</aggregate>
-                    <includes>
-                        <include>src/main/java/org/redisson/</include>
-                    </includes>
-                    <excludes>
-                        <exclude>target/**</exclude>
-                    </excludes>
-                    <useDefaultExcludes>true</useDefaultExcludes>
-                    <mapping>
-                        <java>JAVADOC_STYLE</java>
-                    </mapping>
-                    <strictCheck>true</strictCheck>
-                    <useDefaultMapping>true</useDefaultMapping>
-                    <encoding>UTF-8</encoding>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
-
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
@@ -123,14 +91,14 @@
         <dependency>
             <groupId>io.micronaut.cache</groupId>
             <artifactId>micronaut-cache-core</artifactId>
-            <version>4.3.0</version>
+            <version>5.2.0</version>
             <optional>true</optional>
         </dependency>
 
         <dependency>
             <groupId>io.micronaut.session</groupId>
             <artifactId>micronaut-session</artifactId>
-            <version>4.3.0</version>
+            <version>4.6.0</version>
             <optional>true</optional>
         </dependency>
 
@@ -173,7 +141,7 @@
         <dependency>
           <groupId>io.micronaut.test</groupId>
           <artifactId>micronaut-test-junit5</artifactId>
-          <version>4.4.0</version>
+          <version>4.7.0</version>
           <scope>test</scope>
         </dependency>
         <dependency>

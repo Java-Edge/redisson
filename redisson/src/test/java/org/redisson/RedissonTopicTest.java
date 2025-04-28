@@ -1,5 +1,11 @@
 package org.redisson;
 
+import io.netty.channel.socket.DatagramChannel;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.resolver.AddressResolverGroup;
+import io.netty.resolver.dns.DnsServerAddressStreamProvider;
+import io.netty.resolver.dns.DnsServerAddresses;
+import io.netty.util.internal.SocketUtils;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Disabled;
@@ -20,13 +26,17 @@ import org.redisson.client.protocol.RedisCommands;
 import org.redisson.cluster.ClusterNodeInfo;
 import org.redisson.config.Config;
 import org.redisson.config.SubscriptionMode;
+import org.redisson.connection.SequentialDnsAddressResolverFactory;
 import org.redisson.connection.balancer.RandomLoadBalancer;
 import org.redisson.misc.RedisURI;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.testcontainers.containers.ContainerState;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.startupcheck.MinimumDurationRunningStartupCheckStrategy;
 
 import java.io.Serializable;
+import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
@@ -76,72 +86,55 @@ public class RedissonTopicTest extends RedisDockerTest {
     }
 
     @Test
-    public void testCluster() throws InterruptedException {
-        GenericContainer redisCluster = new GenericContainer<>("vishnunair/docker-redis-cluster")
-                .withExposedPorts(6379, 6380, 6381, 6382, 6383, 6384)
-                .withStartupCheckStrategy(new MinimumDurationRunningStartupCheckStrategy(Duration.ofSeconds(10)));
-        redisCluster.start();
-
-        Config config = new Config();
-        config.setProtocol(protocol);
-        config.useClusterServers()
-                .setNatMapper(new NatMapper() {
-                    @Override
-                    public RedisURI map(RedisURI uri) {
-                        if (redisCluster.getMappedPort(uri.getPort()) == null) {
-                            return uri;
-                        }
-                        return new RedisURI(uri.getScheme(), redisCluster.getHost(), redisCluster.getMappedPort(uri.getPort()));
-                    }
-                })
-                .addNodeAddress("redis://127.0.0.1:" + redisCluster.getFirstMappedPort());
-        RedissonClient redisson = Redisson.create(config);
-
-        RedisCluster nodes = redisson.getRedisNodes(RedisNodes.CLUSTER);
-        for (RedisClusterSlave slave : nodes.getSlaves()) {
-            slave.setConfig("notify-keyspace-events", "Eg");
-        }
-        for (RedisClusterMaster master : nodes.getMasters()) {
-            master.setConfig("notify-keyspace-events", "Eg");
-        }
-
-        AtomicInteger subscribedCounter = new AtomicInteger();
-        AtomicInteger unsubscribedCounter = new AtomicInteger();
-        RTopic topic = redisson.getTopic("__keyevent@0__:del", StringCodec.INSTANCE);
-        int id1 = topic.addListener(new StatusListener() {
-            @Override
-            public void onSubscribe(String channel) {
-                subscribedCounter.incrementAndGet();
+    public void testCluster() {
+        withNewCluster((ns, redisson) -> {
+            RedisCluster nodes = redisson.getRedisNodes(RedisNodes.CLUSTER);
+            for (RedisClusterSlave slave : nodes.getSlaves()) {
+                slave.setConfig("notify-keyspace-events", "Eg");
+            }
+            for (RedisClusterMaster master : nodes.getMasters()) {
+                master.setConfig("notify-keyspace-events", "Eg");
             }
 
-            @Override
-            public void onUnsubscribe(String channel) {
-                unsubscribedCounter.incrementAndGet();
+            AtomicInteger subscribedCounter = new AtomicInteger();
+            AtomicInteger unsubscribedCounter = new AtomicInteger();
+            RTopic topic = redisson.getTopic("__keyevent@0__:del", StringCodec.INSTANCE);
+            int id1 = topic.addListener(new StatusListener() {
+                @Override
+                public void onSubscribe(String channel) {
+                    subscribedCounter.incrementAndGet();
+                }
+
+                @Override
+                public void onUnsubscribe(String channel) {
+                    unsubscribedCounter.incrementAndGet();
+                }
+            });
+
+            AtomicInteger counter = new AtomicInteger();
+
+            MessageListener<String> listener = (channel, msg) -> {
+                System.out.println("mes " + channel + " counter " + counter.get());
+                counter.incrementAndGet();
+            };
+            int id2 = topic.addListener(String.class, listener);
+
+            for (int i = 0; i < 10; i++) {
+                redisson.getBucket("" + i).set(i);
+                redisson.getBucket("" + i).delete();
+                try {
+                    Thread.sleep(7);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
             }
+
+            Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> counter.get() > 9);
+            assertThat(subscribedCounter.get()).isEqualTo(1);
+            assertThat(unsubscribedCounter.get()).isZero();
+
+            topic.removeListener(id1, id2);
         });
-
-        AtomicInteger counter = new AtomicInteger();
-
-        MessageListener<String> listener = (channel, msg) -> {
-            System.out.println("mes " + channel + " counter " + counter.get());
-            counter.incrementAndGet();
-        };
-        int id2 = topic.addListener(String.class, listener);
-
-        for (int i = 0; i < 10; i++) {
-            redisson.getBucket("" + i).set(i);
-            redisson.getBucket("" + i).delete();
-            Thread.sleep(7);
-        }
-
-        Awaitility.await().atMost(Duration.ofSeconds(2)).until(() -> counter.get() > 9);
-        assertThat(subscribedCounter.get()).isEqualTo(1);
-        assertThat(unsubscribedCounter.get()).isZero();
-
-        topic.removeListener(id1, id2);
-
-        redisson.shutdown();
-        redisCluster.stop();
     }
 
     @Test
@@ -398,6 +391,23 @@ public class RedissonTopicTest extends RedisDockerTest {
         latch.await();
         topic.removeAllListeners();
     }
+
+    @Test
+    public void testLambdaOptimizationByJVM() {
+        RTopic topic = redisson.getTopic("topic");
+
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            for (int i = 0; i < 50; i++) {
+                pool.submit(() -> {
+                    MessageListener<Object> listener = (a, b) -> {};
+                    int listenerId = topic.addListener(Object.class, listener);
+                    topic.removeListener(listenerId);
+                });
+            }
+        }
+
+        assertThat(topic.countListeners()).isZero();
+    }
     
     @Test
     public void testInnerPublish() throws InterruptedException {
@@ -468,7 +478,7 @@ public class RedissonTopicTest extends RedisDockerTest {
             cfg.setAddress(client.getConfig().useClusterServers().getNodeAddresses().get(0));
             RedisClient c = RedisClient.create(cfg);
             RedisConnection cc = c.connect();
-            List<ClusterNodeInfo> mastersList = cc.sync(RedisCommands.CLUSTER_NODES);
+            List<ClusterNodeInfo> mastersList = cc.sync(RedisCommands.REDIS_CLUSTER_NODES);
             mastersList = mastersList.stream().filter(i -> i.containsFlag(ClusterNodeInfo.Flag.MASTER)).collect(Collectors.toList());
             c.shutdown();
 
@@ -847,6 +857,57 @@ public class RedissonTopicTest extends RedisDockerTest {
         redis.stop();
     }
 
+    @Test
+    public void testHostnameChange() throws Exception {
+        SimpleDnsServer s = new SimpleDnsServer();
+
+        Config config = createConfig();
+        config.setAddressResolverGroupFactory(new SequentialDnsAddressResolverFactory() {
+            @Override
+            public AddressResolverGroup<InetSocketAddress> create(Class<? extends DatagramChannel> channelType, Class<? extends SocketChannel> socketChannelType, DnsServerAddressStreamProvider nameServerProvider) {
+                return super.create(channelType, socketChannelType, hostname ->
+                                            DnsServerAddresses.singleton(s.getAddr()).stream());
+            }
+        });
+        config.useSingleServer()
+                .setDnsMonitoringInterval(1000)
+                .setAddress("redis://simplehost:" + REDIS.getFirstMappedPort());
+        RedissonClient redisson = Redisson.create(config);
+
+        RTopic topic = redisson.getTopic("topic");
+
+        Logger logger = LoggerFactory.getLogger("out");
+
+        for (int i = 0; i < 10; i++) {
+
+            Set<String> messages = new HashSet<>();
+            topic.addListener(String.class, new MessageListener<String>() {
+                @Override
+                public void onMessage(CharSequence channel, String msg) {
+                    messages.add(msg);
+                }
+            });
+
+            if (i == 1) {
+                s.updateIP("127.0.0.2");
+            }
+
+            for (int j = 0; j < 60; j++) {
+                topic.publish("test" + j);
+                Thread.sleep(100);
+            }
+
+            assertThat(messages.size()).isEqualTo(60);
+
+            topic.removeAllListeners();
+
+            logger.info("step1 " + i);
+        }
+
+        redisson.shutdown();
+        s.stop();
+    }
+
 
 //    @Test
     public void testReattachInSentinelLong() throws Exception {
@@ -961,6 +1022,7 @@ public class RedissonTopicTest extends RedisDockerTest {
             final AtomicInteger subscriptions = new AtomicInteger();
 
             RedissonClient redisson = Redisson.create(config);
+
             RTopic topic = redisson.getTopic("topic");
             topic.addListener(new StatusListener() {
 
@@ -988,7 +1050,7 @@ public class RedissonTopicTest extends RedisDockerTest {
                 TimeUnit.SECONDS.sleep(20);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
-            }
+                }
 
             nodes.forEach(n -> n.start());
 

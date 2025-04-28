@@ -20,7 +20,9 @@ import org.redisson.client.DefaultNettyHook;
 import org.redisson.client.NettyHook;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.Kryo5Codec;
-import org.redisson.connection.*;
+import org.redisson.connection.AddressResolverGroupFactory;
+import org.redisson.connection.ConnectionListener;
+import org.redisson.connection.SequentialDnsAddressResolverFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,8 +55,6 @@ public class Config {
 
     private ReplicatedServersConfig replicatedServersConfig;
 
-    private ConnectionManager connectionManager;
-
     private int threads = 16;
 
     private int nettyThreads = 32;
@@ -73,6 +73,10 @@ public class Config {
 
     private long lockWatchdogTimeout = 30 * 1000;
 
+    private int lockWatchdogBatchSize = 100;
+
+    private long fairLockWaitTimeout = 5 * 60000;
+
     private boolean checkLockSyncedSlaves = true;
 
     private long slavesSyncTimeout = 1000;
@@ -81,7 +85,7 @@ public class Config {
 
     private boolean keepPubSubOrder = true;
 
-    private boolean useScriptCache = false;
+    private boolean useScriptCache = true;
 
     private int minCleanUpDelay = 5;
 
@@ -122,6 +126,8 @@ public class Config {
         setUseScriptCache(oldConf.isUseScriptCache());
         setKeepPubSubOrder(oldConf.isKeepPubSubOrder());
         setLockWatchdogTimeout(oldConf.getLockWatchdogTimeout());
+        setLockWatchdogBatchSize(oldConf.getLockWatchdogBatchSize());
+        setFairLockWaitTimeout(oldConf.getFairLockWaitTimeout());
         setCheckLockSyncedSlaves(oldConf.isCheckLockSyncedSlaves());
         setSlavesSyncTimeout(oldConf.getSlavesSyncTimeout());
         setNettyThreads(oldConf.getNettyThreads());
@@ -150,10 +156,6 @@ public class Config {
         if (oldConf.getReplicatedServersConfig() != null) {
             setReplicatedServersConfig(new ReplicatedServersConfig(oldConf.getReplicatedServersConfig()));
         }
-        if (oldConf.getConnectionManager() != null) {
-            useCustomServers(oldConf.getConnectionManager());
-        }
-
     }
 
     public NettyHook getNettyHook() {
@@ -257,7 +259,7 @@ public class Config {
         checkSingleServerConfig();
 
         if (replicatedServersConfig == null) {
-            replicatedServersConfig = new ReplicatedServersConfig();
+            replicatedServersConfig = config;
         }
         return replicatedServersConfig;
     }
@@ -268,29 +270,6 @@ public class Config {
 
     protected void setReplicatedServersConfig(ReplicatedServersConfig replicatedServersConfig) {
         this.replicatedServersConfig = replicatedServersConfig;
-    }
-
-    /**
-     * Returns the connection manager if supplied via
-     * {@link #useCustomServers(ConnectionManager)}
-     * 
-     * @return ConnectionManager
-     */
-    @Deprecated
-    ConnectionManager getConnectionManager() {
-        return connectionManager;
-    }
-
-    /**
-     * This is an extension point to supply custom connection manager.
-     * 
-     * @see ReplicatedConnectionManager on how to implement a connection
-     *      manager.
-     * @param connectionManager for supply
-     */
-    @Deprecated
-    public void useCustomServers(ConnectionManager connectionManager) {
-        this.connectionManager = connectionManager;
     }
 
     /**
@@ -564,6 +543,41 @@ public class Config {
 
     public long getLockWatchdogTimeout() {
         return lockWatchdogTimeout;
+    }
+
+
+    /**
+     * This parameter is only used if fair lock has been acquired without waitTimeout parameter definition
+     *
+     * Default is 5*60000 milliseconds
+     *
+     * @param fairLockWaitTimeout in milliseconds
+     * @return config
+     */
+    public Config setFairLockWaitTimeout(long fairLockWaitTimeout) {
+        this.fairLockWaitTimeout = fairLockWaitTimeout;
+        return this;
+    }
+
+    public long getFairLockWaitTimeout() {
+        return fairLockWaitTimeout;
+    }
+
+    /**
+     * This parameter is only used if lock has been acquired without leaseTimeout parameter definition.
+     * Defines amount of locks utilized in a single lock watchdog execution.
+     * <p>
+     * Default is 100
+     *
+     * @param lockWatchdogBatchSize amount of locks used by a single lock watchdog execution
+     * @return config
+     */
+    public Config setLockWatchdogBatchSize(int lockWatchdogBatchSize) {
+        this.lockWatchdogBatchSize = lockWatchdogBatchSize;
+        return this;
+    }
+    public int getLockWatchdogBatchSize() {
+        return lockWatchdogBatchSize;
     }
 
     /**

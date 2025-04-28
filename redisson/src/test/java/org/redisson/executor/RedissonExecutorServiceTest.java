@@ -4,18 +4,21 @@ import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.awaitility.Awaitility;
+import org.joor.Reflect;
 import org.junit.jupiter.api.*;
 import org.redisson.RedisDockerTest;
 import org.redisson.Redisson;
 import org.redisson.RedissonNode;
+import org.redisson.RedissonTopic;
 import org.redisson.api.*;
 import org.redisson.api.annotation.RInject;
 import org.redisson.api.executor.TaskFinishedListener;
 import org.redisson.api.executor.TaskStartedListener;
+import org.redisson.api.listener.MessageListener;
+import org.redisson.client.codec.LongCodec;
 import org.redisson.config.Config;
 import org.redisson.config.RedissonNodeConfig;
 
-import java.io.IOException;
 import java.io.Serializable;
 import java.time.Duration;
 import java.util.Arrays;
@@ -27,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
+@Timeout(value = 8, unit = TimeUnit.MINUTES)
 public class RedissonExecutorServiceTest extends RedisDockerTest {
 
     private static RedissonNode node;
@@ -225,7 +229,7 @@ public class RedissonExecutorServiceTest extends RedisDockerTest {
 
         redisson.getKeys().delete("counter");
         f.get();
-        assertThat(redisson.getKeys().count()).isEqualTo(1);
+        assertThat(redisson.getKeys().count()).isEqualTo(3);
     }
     
     @Test
@@ -343,7 +347,9 @@ public class RedissonExecutorServiceTest extends RedisDockerTest {
         RExecutorService executor = redisson.getExecutorService("test");
         RExecutorFuture<?> future = executor.submit("1234", new ScheduledRunnableTask("executed1"));
         assertThat(future.getTaskId()).isEqualTo("1234");
-        future.cancel(true);
+        future.toCompletableFuture().join();
+
+        assertThat(redisson.getAtomicLong("executed1").get()).isEqualTo(1);
     }
 
     @Test
@@ -510,6 +516,35 @@ public class RedissonExecutorServiceTest extends RedisDockerTest {
         assertThat(e.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
         assertThat(e.isTerminated()).isTrue();
     }
+
+    @Test
+    public void testIdCheck() {
+        RExecutorService e = redisson.getExecutorService("test");
+
+        e.submit("1", new RunnableTask());
+
+        Assertions.assertThrowsExactly(IllegalArgumentException.class, () -> {
+            e.submit("1", new RunnableTask());
+        });
+
+        e.submit("2", new CallableTask());
+
+        Assertions.assertThrowsExactly(IllegalArgumentException.class, () -> {
+            e.submit("2", new CallableTask());
+        });
+
+        e.submit("3", new CallableTask(), Duration.ofSeconds(10));
+
+        Assertions.assertThrowsExactly(IllegalArgumentException.class, () -> {
+            e.submit("3", new CallableTask(), Duration.ofSeconds(10));
+        });
+
+        e.submit("4", new RunnableTask(), Duration.ofSeconds(10));
+
+        Assertions.assertThrowsExactly(IllegalArgumentException.class, () -> {
+            e.submit("4", new RunnableTask(), Duration.ofSeconds(10));
+        });
+    }
     
     @Test
     public void testShutdownEmpty() throws InterruptedException {
@@ -574,6 +609,19 @@ public class RedissonExecutorServiceTest extends RedisDockerTest {
         Thread.sleep(2000);
         assertThat(executor.getTaskCount()).isEqualTo(0);
         assertThat(redisson.getKeys().countExists("testparam")).isEqualTo(0);
+    }
+
+    @Test
+    public void testExpiration() throws InterruptedException, ExecutionException {
+        RScheduledExecutorService executor = redisson.getExecutorService("test");
+        Future<?> future = executor.submit(new ScheduledRunnableTask("testparam"), 10, TimeUnit.SECONDS);
+
+        future.get();
+
+        assertThat(redisson.getKeys().countExists("testparam")).isEqualTo(1);
+        String tasksExpirationTimeName = Reflect.on(executor).get("tasksExpirationTimeName");
+        RScoredSortedSet<String> set = redisson.getScoredSortedSet(tasksExpirationTimeName);
+        assertThat(set.size()).isEqualTo(0);
     }
 
     @Test
@@ -667,6 +715,44 @@ public class RedissonExecutorServiceTest extends RedisDockerTest {
                 }
             });
         });
+    }
+
+    @Test
+    public void testTaskDelay4TaskService() throws IllegalAccessException, NoSuchFieldException, InterruptedException {
+        RScheduledExecutorService test = redisson.getExecutorService("test");
+        String topicName = Reflect.on(test).get("schedulerChannelName");
+        RedissonTopic topic = RedissonTopic.createRaw(LongCodec.INSTANCE, ((Redisson) redisson).getCommandExecutor(), topicName);
+
+        AtomicInteger counter = new AtomicInteger();
+
+        topic.addListener(Long.class, new MessageListener<Long>() {
+            @Override
+            public void onMessage(CharSequence channel, Long msg) {
+                counter.incrementAndGet();
+            }
+        });
+
+        test.submitAsync(new DelayedTask(10000, "test-counter"));
+        Thread.sleep(2000);
+
+        assertThat(counter.get()).isGreaterThan(0);
+    }
+
+    @Test
+    public void testSubmitAfterPause() throws InterruptedException {
+
+        RExecutorService redissonES = redisson.getExecutorService("test-worker");
+        redissonES.registerWorkers(WorkerOptions.defaults().workers(2));
+
+        redissonES.submit(new RunnableTask());
+        Thread.sleep(Duration.ofSeconds(1));
+        assertThat(redissonES.getTaskCount()).isEqualTo(0);
+
+        Thread.sleep(Duration.ofMinutes(1));
+
+        redissonES.submit(new RunnableTask());
+        Thread.sleep(Duration.ofSeconds(1));
+        assertThat(redissonES.getTaskCount()).isEqualTo(0);
     }
 
 }

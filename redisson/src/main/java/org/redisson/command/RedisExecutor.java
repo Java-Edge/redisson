@@ -20,6 +20,8 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.Timeout;
 import io.netty.util.TimerTask;
+import io.netty.util.concurrent.EventExecutor;
+import io.netty.util.concurrent.SingleThreadEventExecutor;
 import org.redisson.RedissonShutdownException;
 import org.redisson.ScanResult;
 import org.redisson.api.NodeType;
@@ -44,6 +46,8 @@ import org.redisson.misc.RedisURI;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiConsumer;
@@ -174,6 +178,12 @@ public class RedisExecutor<V, R> {
                     return;
                 }
 
+                if (connectionManager.getServiceManager().isShuttingDown()) {
+                    exception = new RedissonShutdownException("Redisson is shutdown");
+                    tryComplete(attemptPromise, exception);
+                    return;
+                }
+
                 if (connectionFuture.isDone() && connectionFuture.isCompletedExceptionally()) {
                     exception = convertException(connectionFuture);
                     tryComplete(attemptPromise, exception);
@@ -225,7 +235,7 @@ public class RedisExecutor<V, R> {
                         "Increase connection pool size or timeout. "
                         + "Node source: " + source
                         + ", " + LogHelper.toString(command, params)
-                        + " after " + attempt + " retry attempts");
+                        + " after " + attempt + " of " + attempts + " retry attempts");
 
                 attemptPromise.completeExceptionally(exception);
             }
@@ -243,12 +253,14 @@ public class RedisExecutor<V, R> {
 
         TimerTask task = timeout -> {
             if (writeFuture.cancel(false)) {
+                int pendingTasks = countPendingTasks();
                 exception = new RedisTimeoutException("Command still hasn't been written into connection! " +
                         "Check CPU usage of the JVM. Check that there are no blocking invocations in async/reactive/rx listeners or subscribeOnElements method. Check connection with Redis node: " + connectionFuture.join().getRedisClient().getAddr() +
-                        " for TCP packet drops. Try to increase nettyThreads setting. "
+                        " for TCP packet drops. Try to increase nettyThreads setting."
+                        + " Netty pending tasks: " + pendingTasks + ","
                         + " Node source: " + source + ", connection: " + connectionFuture.join()
                         + ", " + LogHelper.toString(command, params)
-                        + " after " + attempt + " retry attempts");
+                        + " after " + attempt + " of " + attempts + " retry attempts");
                 attemptPromise.completeExceptionally(exception);
             }
         };
@@ -274,19 +286,21 @@ public class RedisExecutor<V, R> {
                                 "Increase connection pool size. "
                                 + "Node source: " + source
                                 + ", " + LogHelper.toString(command, params)
-                                + " after " + attempt + " retry attempts");
+                                + " after " + attempt + " of " + attempts + " retry attempts");
                 } else {
                     if (connectionFuture.isDone() && !connectionFuture.isCompletedExceptionally()) {
                         if (writeFuture == null || !writeFuture.isDone()) {
                             if (attempt == attempts) {
                                 if (writeFuture != null && writeFuture.cancel(false)) {
                                     if (exception == null) {
+                                        int pendingTasks = countPendingTasks();
                                         exception = new RedisTimeoutException("Command still hasn't been written into connection! " +
                                                 "Check CPU usage of the JVM. Check that there are no blocking invocations in async/reactive/rx listeners or subscribeOnElements method. Check connection with Redis node: " + getNow(connectionFuture).getRedisClient().getAddr() +
-                                                " for TCP packet drops. Try to increase nettyThreads setting. "
-                                                + " Node source: " + source + ", connection: " + getNow(connectionFuture)
+                                                " for TCP packet drops. Try to increase nettyThreads setting." +
+                                                " Netty pending tasks: " + pendingTasks + ","
+                                              + " Node source: " + source + ", connection: " + getNow(connectionFuture)
                                                 + ", " + LogHelper.toString(command, params)
-                                                + " after " + attempt + " retry attempts");
+                                                + " after " + attempt + " of " + attempts + " retry attempts");
                                     }
                                     attemptPromise.completeExceptionally(exception);
                                 }
@@ -357,16 +371,31 @@ public class RedisExecutor<V, R> {
         }
 
         if (!future.isSuccess()) {
+            int pendingTasks = countPendingTasks();
             exception = new WriteRedisConnectionException(
-                    "Unable to write command into connection! Check CPU usage of the JVM. Try to increase nettyThreads setting. Node source: "
+                    "Unable to write command into connection! Check CPU usage of the JVM. Try to increase nettyThreads setting. " +
+                            "Netty pending tasks: " + pendingTasks + ", " +
+                            "Node source: "
                     + source + ", connection: " + connection +
                     ", " + LogHelper.toString(command, params)
-                    + " after " + attempt + " retry attempts", future.cause());
+                    + " after " + attempt + " of " + attempts + " retry attempts",
+                    future.cause());
             tryComplete(attemptPromise, exception);
             return;
         }
 
         scheduleResponseTimeout(attemptPromise, connection);
+    }
+
+    private int countPendingTasks() {
+        int pendingTasks = 0;
+        for (EventExecutor eventExecutor : connectionManager.getServiceManager().getGroup()) {
+            if (eventExecutor instanceof SingleThreadEventExecutor) {
+                SingleThreadEventExecutor singleThreadEventExecutor = (SingleThreadEventExecutor) eventExecutor;
+                pendingTasks += singleThreadEventExecutor.pendingTasks();
+            }
+        }
+        return pendingTasks;
     }
 
     private void tryComplete(CompletableFuture<R> attemptPromise, RedisException exception) {
@@ -435,12 +464,14 @@ public class RedisExecutor<V, R> {
                 return;
             }
 
+            int pendingTasks = countPendingTasks();
             attemptPromise.completeExceptionally(
                     new RedisResponseTimeoutException("Redis server response timeout (" + timeoutAmount + " ms) occured"
-                            + " after " + attempt + " retry attempts,"
+                            + " after " + attempt + " of " + attempts + " retry attempts,"
                             + " is non-idempotent command: " + (command != null && command.isNoRetry())
                             + " Check connection with Redis node: " + connection.getRedisClient().getAddr() + " for TCP packet drops or bandwidth limits. "
-                            + " Try to increase nettyThreads and/or timeout settings. "
+                            + " Try to increase nettyThreads and/or timeout settings."
+                            + " Netty pending tasks: " + pendingTasks + ", "
                             + LogHelper.toString(command, params) + ", channel: " + connection.getChannel()));
         };
 
@@ -637,7 +668,7 @@ public class RedisExecutor<V, R> {
         FailedNodeDetector detector = client.getConfig().getFailedNodeDetector();
         detector.onCommandFailed(cause);
         if (detector.isNodeFailed()) {
-            log.error("Redis node {} has been marked as failed as failed according to the detection logic defined in {}",
+            log.error("Redis node {} has been marked as failed according to the detection logic defined in {}",
                             entry.getClient().getAddr(), detector);
             entry.shutdownAndReconnectAsync(client, cause);
         }
@@ -736,7 +767,7 @@ public class RedisExecutor<V, R> {
         return connectionFuture;
     }
 
-    private static final Map<ClassLoader, Map<Codec, Codec>> CODECS = new LRUCacheMap<>(25, 0, 0);
+    private static final Map<ClassLoader, Map<Codec, Codec>> CODECS = new LRUCacheMap<>(100, 0, 0);
 
     protected final Codec getCodec(Codec codec) {
         if (codec == null) {
@@ -761,8 +792,9 @@ public class RedisExecutor<V, R> {
             codecToUse = map.get(codec);
             if (codecToUse == null) {
                 try {
-                    codecToUse = codec.getClass().getConstructor(ClassLoader.class, codec.getClass()).newInstance(threadClassLoader, codec);
-                } catch (NoSuchMethodException e) {
+                    Constructor<? extends Codec> c = codec.getClass().getConstructor(ClassLoader.class, codec.getClass());
+                    codecToUse = c.newInstance(threadClassLoader, codec);
+                } catch (NoSuchMethodException | InvocationTargetException e) {
                     codecToUse = codec;
                     // skip
                 } catch (Exception e) {

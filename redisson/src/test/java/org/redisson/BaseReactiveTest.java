@@ -8,7 +8,6 @@ import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.io.IOException;
 import java.util.Iterator;
 
 public abstract class BaseReactiveTest extends RedisDockerTest {
@@ -39,7 +38,7 @@ public abstract class BaseReactiveTest extends RedisDockerTest {
     public static <V> V sync(Mono<V> mono) {
         return mono.block();
     }
-    
+
     public static <V> V sync(Flux<V> flux) {
         return flux.single().block();
     }

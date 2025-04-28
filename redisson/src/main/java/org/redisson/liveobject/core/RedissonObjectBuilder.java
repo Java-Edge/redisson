@@ -102,21 +102,11 @@ public class RedissonObjectBuilder {
     }
 
     public void storeAsync(RObject ar, String fieldName, RMap<String, Object> liveMap) {
-        Codec codec = ar.getCodec();
-        if (codec != null) {
-            codecProvider.registerCodec((Class) codec.getClass(), codec);
-        }
-        liveMap.fastPutAsync(fieldName,
-                new RedissonReference(ar.getClass(), ar.getName(), codec));
+        liveMap.fastPutAsync(fieldName, ar);
     }
-    
+
     public void store(RObject ar, String fieldName, RMap<String, Object> liveMap) {
-        Codec codec = ar.getCodec();
-        if (codec != null) {
-            codecProvider.registerCodec((Class) codec.getClass(), codec);
-        }
-        liveMap.fastPut(fieldName,
-                new RedissonReference(ar.getClass(), ar.getName(), codec));
+        liveMap.fastPut(fieldName, ar);
     }
     
     public RObject createObject(Object id, Class<?> clazz, Class<?> fieldType, String fieldName) {
@@ -203,14 +193,12 @@ public class RedissonObjectBuilder {
     
     private Object fromReference(RedissonClient redisson, RedissonReference rr) throws ReflectiveOperationException {
         Class<?> type = rr.getType();
-        if (type != null) {
-            if (ClassUtils.isAnnotationPresent(type, REntity.class)) {
-                RedissonLiveObjectService liveObjectService = (RedissonLiveObjectService) redisson.getLiveObjectService();
-                
-                NamingScheme ns = getNamingScheme(type);
-                Object id = ns.resolveId(rr.getKeyName());
-                return liveObjectService.createLiveObject(type, id);
-            }
+        if (ClassUtils.isAnnotationPresent(type, REntity.class)) {
+            RedissonLiveObjectService liveObjectService = (RedissonLiveObjectService) redisson.getLiveObjectService();
+
+            NamingScheme ns = getNamingScheme(type);
+            Object id = ns.resolveId(rr.getKeyName());
+            return liveObjectService.createLiveObject(type, id);
         }
 
         return getObject(redisson, rr, type, codecProvider);

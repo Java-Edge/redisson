@@ -75,6 +75,7 @@ public class MasterSlaveEntry {
     final AtomicBoolean noPubSubSlaves = new AtomicBoolean();
 
     volatile int availableSlaves = -1;
+    volatile boolean aofEnabled;
 
     public MasterSlaveEntry(ConnectionManager connectionManager, MasterSlaveServersConfig config) {
         this.connectionManager = connectionManager;
@@ -115,8 +116,6 @@ public class MasterSlaveEntry {
     }
 
     private void removeSlaveEntry(ClientConnectionsEntry entry) {
-        slaveConnectionPool.removeEntry(entry);
-        slavePubSubConnectionPool.removeEntry(entry);
         client2Entry.remove(entry.getClient());
 
         if (config.getSubscriptionMode() == SubscriptionMode.SLAVE) {
@@ -125,12 +124,7 @@ public class MasterSlaveEntry {
     }
 
     private void addSlaveEntry(ClientConnectionsEntry entry) {
-        if (client2Entry.get(entry.getClient()) != null) {
-            return;
-        }
-        slaveConnectionPool.addEntry(entry);
-        slavePubSubConnectionPool.addEntry(entry);
-        client2Entry.put(entry.getClient(), entry);
+        client2Entry.putIfAbsent(entry.getClient(), entry);
     }
 
     private boolean hasNoSlaves() {
@@ -180,9 +174,6 @@ public class MasterSlaveEntry {
                         if (!config.isSlaveNotUsed()) {
                             addSlaveEntry(masterEntry);
                         }
-
-                        masterConnectionPool.addEntry(masterEntry);
-                        masterPubSubConnectionPool.addEntry(masterEntry);
                         return client;
                     });
         }).whenComplete((r, e) -> {
@@ -537,8 +528,6 @@ public class MasterSlaveEntry {
     }
 
     private void removeMaster(ClientConnectionsEntry masterEntry) {
-        masterConnectionPool.removeEntry(masterEntry);
-        masterPubSubConnectionPool.removeEntry(masterEntry);
         removeSlaveEntry(masterEntry);
         masterEntry.nodeDown();
         masterEntry.shutdownAsync();
@@ -790,4 +779,11 @@ public class MasterSlaveEntry {
         availableSlaves = slaves;
     }
 
+    public boolean isAofEnabled() {
+        return aofEnabled;
+    }
+
+    public void setAofEnabled(boolean aof) {
+        this.aofEnabled = aof;
+    }
 }

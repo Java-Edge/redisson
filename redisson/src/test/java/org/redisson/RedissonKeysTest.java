@@ -8,11 +8,16 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.redisson.api.*;
 import org.redisson.api.listener.FlushListener;
 import org.redisson.api.listener.NewObjectListener;
+import org.redisson.api.options.KeysScanOptions;
+import org.redisson.api.stream.StreamAddArgs;
+import org.redisson.api.stream.StreamCreateGroupArgs;
 import org.redisson.config.Config;
 import org.redisson.config.Protocol;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -191,7 +196,8 @@ public class RedissonKeysTest extends RedisDockerTest {
 
     @Test
     public void testEmptyKeys() {
-        Iterable<String> keysIterator = redisson.getKeys().getKeysByPattern("test*", 10);
+        Iterable<String> keysIterator = redisson.getKeys().getKeys(KeysScanOptions.defaults().pattern("test*").chunkSize(10));
+//        Iterable<String> keysIterator = redisson.getKeys().getKeysByPattern("test*", 10);
         assertThat(keysIterator.iterator().hasNext()).isFalse();
     }
 
@@ -207,7 +213,8 @@ public class RedissonKeysTest extends RedisDockerTest {
 
             Long noOfKeysDeleted = 0L;
             int chunkSize = 20;
-            Iterable<String> keysIterator = redisson.getKeys().getKeysByPattern("test*", chunkSize);
+//            Iterable<String> keysIterator = redisson.getKeys().getKeysByPattern("test*", chunkSize);
+            Iterable<String> keysIterator = redisson.getKeys().getKeys(KeysScanOptions.defaults().pattern("test*").chunkSize(chunkSize));
             Set<String> keys = new HashSet<>();
             for (String key : keysIterator) {
                 keys.add(key);
@@ -228,6 +235,21 @@ public class RedissonKeysTest extends RedisDockerTest {
         });
     }
 
+    @Test
+    public void testKeysType() {
+        redisson.getBucket("test1").set("someValue");
+        redisson.getBucket("test2").set("someValue");
+
+        RStream<Object, Object> s = redisson.getStream("test12");
+        s.createGroup(StreamCreateGroupArgs.name("g").makeStream());
+        s.add(StreamAddArgs.entry("1", "2"));
+
+        Iterable<String> iter = redisson.getKeys().getKeys(KeysScanOptions.defaults().type(RType.OBJECT));
+        assertThat(iter).containsOnly("test1", "test2");
+
+        Iterable<String> iter2 = redisson.getKeys().getKeys(KeysScanOptions.defaults().type(RType.STREAM));
+        assertThat(iter2).containsOnly("test12");
+    }
 
     @Test
     public void testKeysIterablePattern() {
@@ -236,15 +258,12 @@ public class RedissonKeysTest extends RedisDockerTest {
 
         redisson.getBucket("test12").set("someValue");
 
-        Iterator<String> iterator = redisson.getKeys().getKeysByPattern("test?").iterator();
-        for (; iterator.hasNext();) {
-            String key = iterator.next();
-            assertThat(key).isIn("test1", "test2");
-        }
+        Iterator<String> iterator = redisson.getKeys().getKeys(KeysScanOptions.defaults().pattern("test?")).iterator();
+        assertThat(iterator).toIterable().containsOnly("test1", "test2");
     }
 
     @Test
-    public void testKeysIterable() throws InterruptedException {
+    public void testKeysIterable() {
         Set<String> keys = new HashSet<String>();
         for (int i = 0; i < 115; i++) {
             String key = "key" + Math.random();
@@ -261,6 +280,49 @@ public class RedissonKeysTest extends RedisDockerTest {
         }
         Assertions.assertEquals(0, keys.size());
         Assertions.assertFalse(redisson.getKeys().getKeys().iterator().hasNext());
+    }
+
+    @Test
+    public void testKeysAsyncIterable() {
+        Set<String> keys = new HashSet<String>();
+        for (int i = 0; i < 115; i++) {
+            String key = "key" + Math.random();
+            RBucket<String> bucket = redisson.getBucket(key);
+            bucket.set("someValue");
+        }
+        
+        AsyncIterator<String> iterator = redisson.getKeys().getKeysAsync();
+        CompletionStage<Void> f = iterateAll(iterator, keys);
+        f.toCompletableFuture().join();
+        assertThat(redisson.getKeys().count()).isEqualTo(keys.size());
+    }
+    
+    @Test
+    public void testKeysAsyncIterablePattern() {
+        Set<String> keys = new HashSet<String>();
+        for (int i = 0; i < 115; i++) {
+            String key = "key" + Math.random();
+            RBucket<String> bucket = redisson.getBucket(key);
+            bucket.set("someValue");
+        }
+        int limit = 23;
+        AsyncIterator<String> iterator = redisson.getKeys().getKeysAsync(KeysScanOptions.defaults().limit(limit));
+        CompletionStage<Void> f = iterateAll(iterator, keys);
+        f.toCompletableFuture().join();
+        assertThat(limit).isEqualTo(keys.size());
+    }
+    
+    public CompletionStage<Void> iterateAll(AsyncIterator<String> iterator, Set<String> keys) {
+        return iterator.hasNext().thenCompose(r -> {
+            if (r) {
+                return iterator.next().thenCompose(k -> {
+                    keys.add(k);
+                    return iterateAll(iterator, keys);
+                });
+            } else {
+                return CompletableFuture.completedFuture(null);
+            }
+        });
     }
 
     @Test
@@ -354,7 +416,6 @@ public class RedissonKeysTest extends RedisDockerTest {
         Assertions.assertEquals(4L, r.getResponses().get(0));
     }
 
-
     @Test
     public void testFindKeys() {
         RBucket<String> bucket = redisson.getBucket("test1");
@@ -362,10 +423,12 @@ public class RedissonKeysTest extends RedisDockerTest {
         RMap<String, String> map = redisson.getMap("test2");
         map.fastPut("1", "2");
 
-        Iterable<String> keys = redisson.getKeys().getKeysByPattern("test?");
+        Iterable<String> keys = redisson.getKeys().getKeys(KeysScanOptions.defaults().pattern("test?"));
+//        Iterable<String> keys = redisson.getKeys().getKeysByPattern("test?");
         assertThat(keys).containsOnly("test1", "test2");
 
-        Iterable<String> keys2 = redisson.getKeys().getKeysByPattern("test");
+        Iterable<String> keys2 = redisson.getKeys().getKeys(KeysScanOptions.defaults().pattern("test"));
+//        Iterable<String> keys2 = redisson.getKeys().getKeysByPattern("test");
         assertThat(keys2).isEmpty();
     }
 
@@ -399,5 +462,4 @@ public class RedissonKeysTest extends RedisDockerTest {
         s = redisson.getKeys().count();
         assertThat(s).isEqualTo(1);
     }
-
 }

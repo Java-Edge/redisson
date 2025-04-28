@@ -20,6 +20,8 @@ import org.redisson.client.codec.Codec;
 import org.redisson.codec.JsonCodec;
 import org.redisson.config.Config;
 
+import java.util.Collection;
+
 /**
  * Main Redisson interface for access
  * to all redisson objects with RxJava2 interface.
@@ -339,6 +341,14 @@ public interface RedissonRxClient {
      * @return MultiLock object
      */
     RLockRx getMultiLock(RLockRx... locks);
+    /**
+     * Returns RedissonFasterMultiLock instance associated with specified <code>group</code> and <code>values</code>
+     *
+     * @param group the group of values
+     * @param values lock values
+     * @return BatchLock object
+     */
+    RLockRx getMultiLock(String group, Collection<Object> values);
 
     /*
      * Use getMultiLock(RLockReactive) method instead
@@ -746,6 +756,56 @@ public interface RedissonRxClient {
     <K, V> RListMultimapCacheRx<K, V> getListMultimapCache(PlainOptions options);
 
     /**
+     * Returns List based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNativeRx<K, V> getListMultimapCacheNative(String name);
+
+    /**
+     * Returns List based Multimap instance by name
+     * using provided codec for both map keys and values.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @param codec codec for keys and values
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNativeRx<K, V> getListMultimapCacheNative(String name, Codec codec);
+
+    /**
+     * Returns List based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Stores insertion order and allows duplicates for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param options instance options
+     * @return ListMultimapCache object
+     */
+    <K, V> RListMultimapCacheNativeRx<K, V> getListMultimapCacheNative(PlainOptions options);
+
+    /**
      * Returns Set based Multimap instance by name.
      * 
      * @param <K> type of key
@@ -814,6 +874,56 @@ public interface RedissonRxClient {
      * @return SetMultimapCache object
      */
     <K, V> RSetMultimapCacheRx<K, V> getSetMultimapCache(PlainOptions options);
+
+    /**
+     * Returns Set based Multimap instance by name.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNativeRx<K, V> getSetMultimapCacheNative(String name);
+
+    /**
+     * Returns Set based Multimap instance by name
+     * using provided codec for both map keys and values.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name name of object
+     * @param codec codec for keys and values
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNativeRx<K, V> getSetMultimapCacheNative(String name, Codec codec);
+
+    /**
+     * Returns Set based Multimap instance with specified <code>options</code>.
+     * Supports key-entry eviction with a given TTL value.
+     * Doesn't allow duplications for values mapped to key.
+     * <p>
+     * Uses Redis native commands for entry expiration and not a scheduled eviction task.
+     * <p>
+     * Requires <b>Redis 7.4.0 and higher.</b>
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param options instance options
+     * @return SetMultimapCache object
+     */
+    <K, V> RSetMultimapCacheNativeRx<K, V> getSetMultimapCacheNative(PlainOptions options);
 
     /**
      * Returns map instance by name.
@@ -909,6 +1019,31 @@ public interface RedissonRxClient {
      * @return LocalCachedMap object
      */
     <K, V> RLocalCachedMapRx<K, V> getLocalCachedMap(org.redisson.api.options.LocalCachedMapOptions<K, V> options);
+
+    /**
+     * Returns local cached map cache instance by name.
+     * Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param options - local map options
+     * @return LocalCachedMapCache object
+     */
+    <K, V> RLocalCachedMapCacheRx<K, V> getLocalCachedMapCache(String name, LocalCachedMapCacheOptions<K, V> options);
+
+    /**
+     * Returns local cached map cache instance by name using provided codec.
+     * Configured by parameters of options-object.
+     *
+     * @param <K> type of key
+     * @param <V> type of value
+     * @param name - name of object
+     * @param codec - codec for keys and values
+     * @param options - local map options
+     * @return LocalCachedMap object
+     */
+    <K, V> RLocalCachedMapCacheRx<K, V> getLocalCachedMapCache(String name, Codec codec, LocalCachedMapCacheOptions<K, V> options);
 
     /**
      * Returns set instance by name.

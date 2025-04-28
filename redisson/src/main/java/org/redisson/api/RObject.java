@@ -35,6 +35,26 @@ public interface RObject extends RObjectAsync {
     Long getIdleTime();
 
     /**
+     * Returns count of references over this object.
+     *
+     * @return count of reference
+     */
+    int getReferenceCount();
+
+    /**
+     * Returns the logarithmic access frequency counter over this object.
+     *
+     * @return frequency counter
+     */
+    int getAccessFrequency();
+
+    /**
+     * Returns the internal encoding for the Redis object
+     *
+     * @return internal encoding
+     */
+    ObjectEncoding getInternalEncoding();
+    /**
      * Returns bytes amount used by object in Redis memory.
      * 
      * @return size in bytes
@@ -182,7 +202,7 @@ public interface RObject extends RObjectAsync {
 
     /**
      * Rename current object key to <code>newName</code>
-     * only if new key is not exists
+     * only if new key doesn't exist.
      *
      * @param newName - new name of object
      * @return <code>true</code> if object has been renamed successfully and <code>false</code> otherwise

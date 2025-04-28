@@ -17,6 +17,7 @@ package org.redisson.api;
 
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 public interface RRateLimiterReactive extends RExpirableReactive {
 
     /**
-     * Sets the rate limit only if it hasn't been set before.
+     * Use {@link #trySetRate(RateType, long, Duration)} instead
      * 
      * @param mode rate mode
      * @param rate rate
@@ -37,11 +38,35 @@ public interface RRateLimiterReactive extends RExpirableReactive {
      * @return {@code true} if rate was set and {@code false}
      *         otherwise
      */
+    @Deprecated
     Mono<Boolean> trySetRate(RateType mode, long rate, long rateInterval, RateIntervalUnit rateIntervalUnit);
 
     /**
-     * Sets the rate limit and clears state.
-     * Overrides both limit and state if they haven't been set before.
+     * Sets the rate limit only if it hasn't been set before.
+     *
+     * @param mode rate mode
+     * @param rate rate
+     * @param rateInterval rate time interval
+     * @return {@code true} if rate was set and {@code false}
+     *         otherwise
+     */
+    Mono<Boolean> trySetRate(RateType mode, long rate, Duration rateInterval);
+
+    /**
+     * Sets the rate limit only if it hasn't been set before.
+     * Time to live is applied only if rate limit has been set successfully.
+     *
+     * @param mode rate mode
+     * @param rate rate
+     * @param rateInterval rate time interval
+     * @param keepAliveTime this is the maximum time that the limiter will wait for a new acquisition before deletion
+     * @return {@code true} if rate was set and {@code false}
+     *         otherwise
+     */
+    Mono<Boolean> trySetRate(RateType mode, long rate, Duration rateInterval, Duration keepAliveTime);
+
+    /**
+     * Use {@link #setRate(RateType, long, Duration)} instead.
      *
      * @param mode rate mode
      * @param rate rate
@@ -49,7 +74,29 @@ public interface RRateLimiterReactive extends RExpirableReactive {
      * @param rateIntervalUnit rate time interval unit
      *
      */
+    @Deprecated
     Mono<Void> setRate(RateType mode, long rate, long rateInterval, RateIntervalUnit rateIntervalUnit);
+
+    /**
+     * Sets the rate limit and clears the state.
+     * Overrides both limit and state if they haven't been set before.
+     *
+     * @param mode rate mode
+     * @param rate rate
+     * @param rateInterval rate time interval
+     */
+    Mono<Void> setRate(RateType mode, long rate, Duration rateInterval);
+
+    /**
+     * Sets time to live, the rate limit, and clears the state.
+     * Overrides both limit and state if they haven't been set before.
+     *
+     * @param mode rate mode
+     * @param rate rate
+     * @param rateInterval rate time interval
+     * @param keepAliveTime this is the maximum time that the limiter will wait for a new acquisition before deletion
+     */
+    Mono<Void> setRate(RateType mode, long rate, Duration rateInterval, Duration keepAliveTime);
 
     /**
      * Acquires a permit only if one is available at the
@@ -106,7 +153,18 @@ public interface RRateLimiterReactive extends RExpirableReactive {
      * @return void
      */
     Mono<Void> acquire(long permits);
-    
+
+    /**
+     * Use {@link #tryAcquire(Duration)} instead.
+     *
+     * @param timeout the maximum time to wait for a permit
+     * @param unit the time unit of the {@code timeout} argument
+     * @return {@code true} if a permit was acquired and {@code false}
+     *         if the waiting time elapsed before a permit was acquired
+     */
+    @Deprecated
+    Mono<Boolean> tryAcquire(long timeout, TimeUnit unit);
+
     /**
      * Acquires a permit from this RateLimiter, if one becomes available
      * within the given waiting time.
@@ -126,12 +184,23 @@ public interface RRateLimiterReactive extends RExpirableReactive {
      * will not wait at all.
      *
      * @param timeout the maximum time to wait for a permit
+     * @return {@code true} if a permit was acquired and {@code false}
+     *         if the waiting time elapsed before a permit was acquired
+     */
+    Mono<Boolean> tryAcquire(Duration timeout);
+
+    /**
+     * Use {@link #tryAcquire(long, Duration)} instead.
+     *
+     * @param permits amount
+     * @param timeout the maximum time to wait for a permit
      * @param unit the time unit of the {@code timeout} argument
      * @return {@code true} if a permit was acquired and {@code false}
      *         if the waiting time elapsed before a permit was acquired
      */
-    Mono<Boolean> tryAcquire(long timeout, TimeUnit unit);
-    
+    @Deprecated
+    Mono<Boolean> tryAcquire(long permits, long timeout, TimeUnit unit);
+
     /**
      * Acquires the given number of <code>permits</code> only if all are available
      * within the given waiting time.
@@ -151,11 +220,10 @@ public interface RRateLimiterReactive extends RExpirableReactive {
      *
      * @param permits amount
      * @param timeout the maximum time to wait for a permit
-     * @param unit the time unit of the {@code timeout} argument
      * @return {@code true} if a permit was acquired and {@code false}
      *         if the waiting time elapsed before a permit was acquired
      */
-    Mono<Boolean> tryAcquire(long permits, long timeout, TimeUnit unit);
+    Mono<Boolean> tryAcquire(long permits, Duration timeout);
 
     /**
      * Returns amount of available permits.

@@ -26,7 +26,6 @@ import org.redisson.client.codec.Codec;
 import org.redisson.codec.JsonCodec;
 import org.redisson.command.CommandAsyncExecutor;
 import org.redisson.config.Config;
-import org.redisson.config.ConfigSupport;
 import org.redisson.connection.ConnectionManager;
 import org.redisson.connection.ServiceManager;
 import org.redisson.eviction.EvictionScheduler;
@@ -35,9 +34,11 @@ import org.redisson.redisnode.RedissonClusterNodes;
 import org.redisson.redisnode.RedissonMasterSlaveNodes;
 import org.redisson.redisnode.RedissonSentinelMasterSlaveNodes;
 import org.redisson.redisnode.RedissonSingleNode;
+import org.redisson.renewal.LockRenewalScheduler;
 import org.redisson.transaction.RedissonTransaction;
 
 import java.time.Duration;
+import java.util.Collection;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -51,10 +52,6 @@ import java.util.concurrent.TimeUnit;
  */
 public final class Redisson implements RedissonClient {
 
-    static {
-        RedissonReference.warmUp();
-    }
-
     private final EvictionScheduler evictionScheduler;
     private final WriteBehindService writeBehindService;
     private final ConnectionManager connectionManager;
@@ -64,10 +61,12 @@ public final class Redisson implements RedissonClient {
     private final Config config;
 
     Redisson(Config config) {
+        Version.logVersion();
+
         this.config = config;
         Config configCopy = new Config(config);
 
-        connectionManager = ConfigSupport.createConnectionManager(configCopy);
+        connectionManager = ConnectionManager.create(configCopy);
         RedissonObjectBuilder objectBuilder = null;
         if (config.isReferenceEnabled()) {
             objectBuilder = new RedissonObjectBuilder(this);
@@ -75,6 +74,8 @@ public final class Redisson implements RedissonClient {
         commandExecutor = connectionManager.createCommandExecutor(objectBuilder, RedissonObjectBuilder.ReferenceType.DEFAULT);
         evictionScheduler = new EvictionScheduler(commandExecutor);
         writeBehindService = new WriteBehindService(commandExecutor);
+
+        connectionManager.getServiceManager().register(new LockRenewalScheduler(commandExecutor));
     }
 
     public EvictionScheduler getEvictionScheduler() {
@@ -83,10 +84,6 @@ public final class Redisson implements RedissonClient {
 
     public CommandAsyncExecutor getCommandExecutor() {
         return commandExecutor;
-    }
-
-    public ConnectionManager getConnectionManager() {
-        return connectionManager;
     }
 
     public ServiceManager getServiceManager() {
@@ -130,7 +127,8 @@ public final class Redisson implements RedissonClient {
      */
     @Deprecated
     public static RedissonRxClient createRx(Config config) {
-        return new RedissonRx(config);
+        RedissonClient redisson = create(config);
+        return redisson.rxJava();
     }
 
     @Override
@@ -153,7 +151,8 @@ public final class Redisson implements RedissonClient {
      */
     @Deprecated
     public static RedissonReactiveClient createReactive(Config config) {
-        return new RedissonReactive(config);
+        RedissonClient redisson = create(config);
+        return redisson.reactive();
     }
 
     @Override
@@ -347,9 +346,18 @@ public final class Redisson implements RedissonClient {
     }
 
     @Override
+    public <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, LocalCachedMapCacheOptions<K, V> options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
+    }
+
+    @Override
+    public <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, Codec codec, LocalCachedMapCacheOptions<K, V> options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
+    }
+
+    @Override
     public <K, V> RLocalCachedMap<K, V> getLocalCachedMap(String name, LocalCachedMapOptions<K, V> options) {
-        return new RedissonLocalCachedMap<K, V>(commandExecutor, name,
-                options, evictionScheduler, this, writeBehindService);
+        return getLocalCachedMap(name, null, options);
     }
 
     @Override
@@ -374,6 +382,8 @@ public final class Redisson implements RedissonClient {
                 .storeCacheMiss(params.isStoreCacheMiss())
                 .timeToLive(params.getTimeToLiveInMillis())
                 .syncStrategy(LocalCachedMapOptions.SyncStrategy.valueOf(params.getSyncStrategy().toString()))
+                .useObjectAsCacheKey(params.isUseObjectAsCacheKey())
+                .useTopicPattern(params.isUseTopicPattern())
                 .expirationEventPolicy(LocalCachedMapOptions.ExpirationEventPolicy.valueOf(params.getExpirationEventPolicy().toString()))
                 .writer(params.getWriter())
                 .writerAsync(params.getWriterAsync())
@@ -481,6 +491,22 @@ public final class Redisson implements RedissonClient {
     }
 
     @Override
+    public <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(String name) {
+        return new RedissonSetMultimapCacheNative<>(commandExecutor, name);
+    }
+
+    @Override
+    public <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(String name, Codec codec) {
+        return new RedissonSetMultimapCacheNative<>(codec, commandExecutor, name);
+    }
+
+    @Override
+    public <K, V> RSetMultimapCacheNative<K, V> getSetMultimapCacheNative(PlainOptions options) {
+        PlainParams params = (PlainParams) options;
+        return new RedissonSetMultimapCacheNative<>(params.getCodec(), commandExecutor.copy(params), params.getName());
+    }
+
+    @Override
     public <K, V> RListMultimapCache<K, V> getListMultimapCache(String name) {
         return new RedissonListMultimapCache<K, V>(evictionScheduler, commandExecutor, name);
     }
@@ -494,6 +520,23 @@ public final class Redisson implements RedissonClient {
     public <K, V> RListMultimapCache<K, V> getListMultimapCache(PlainOptions options) {
         PlainParams params = (PlainParams) options;
         return new RedissonListMultimapCache<K, V>(evictionScheduler, params.getCodec(),
+                commandExecutor.copy(params), params.getName());
+    }
+
+    @Override
+    public <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(String name) {
+        return new RedissonListMultimapCacheNative<K, V>(commandExecutor, name);
+    }
+
+    @Override
+    public <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(String name, Codec codec) {
+        return new RedissonListMultimapCacheNative<>(codec, commandExecutor, name);
+    }
+
+    @Override
+    public <K, V> RListMultimapCacheNative<K, V> getListMultimapCacheNative(PlainOptions options) {
+        PlainParams params = (PlainParams) options;
+        return new RedissonListMultimapCacheNative<>(params.getCodec(),
                 commandExecutor.copy(params), params.getName());
     }
 
@@ -622,7 +665,12 @@ public final class Redisson implements RedissonClient {
     public RLock getMultiLock(RLock... locks) {
         return new RedissonMultiLock(locks);
     }
-    
+
+    @Override
+    public RLock getMultiLock(String group, Collection<Object> values) {
+        return new RedissonFasterMultiLock(commandExecutor, group, values);
+    }
+
     @Override
     public RLock getRedLock(RLock... locks) {
         return new RedissonRedLock(locks);
@@ -1156,6 +1204,17 @@ public final class Redisson implements RedissonClient {
     public RLiveObjectService getLiveObjectService(LiveObjectOptions options) {
         LiveObjectParams params = (LiveObjectParams) options;
         return new RedissonLiveObjectService(liveObjectClassCache, commandExecutor.copy(params));
+    }
+
+    @Override
+    public RClientSideCaching getClientSideCaching(ClientSideCachingOptions options) {
+        if (!getServiceManager().isResp3()) {
+            throw new IllegalStateException("'protocol' config setting should be set to RESP3 value. "
+                    + System.lineSeparator() + System.lineSeparator() +
+                    "NOTE: client side caching feature invalidates whole Map per entry change which is ineffective. " +
+                    "Use local cached https://redisson.org/docs/data-and-services/collections/#eviction-local-cache-and-data-partitioning or https://redisson.org/docs/data-and-services/collections/#local-cache instead.");
+        }
+        return new RedissonClientSideCaching(commandExecutor, options);
     }
 
     @Override

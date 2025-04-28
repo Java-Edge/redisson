@@ -27,6 +27,8 @@ import org.redisson.remote.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Method;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -43,10 +45,10 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
     public static class Entry {
         
         RFuture<String> future;
-        final AtomicInteger counter;
+        final AtomicInteger freeWorkers;
         
         public Entry(int workers) {
-            counter = new AtomicInteger(workers);
+            freeWorkers = new AtomicInteger(workers);
         }
         
         public void setFuture(RFuture<String> future) {
@@ -57,8 +59,8 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
             return future;
         }
         
-        public AtomicInteger getCounter() {
-            return counter;
+        public AtomicInteger getFreeWorkers() {
+            return freeWorkers;
         }
         
     }
@@ -136,7 +138,7 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
         if (entry == null) {
             return 0;
         }
-        return entry.getCounter().get();
+        return entry.getFreeWorkers().get();
     }
     
     @Override
@@ -233,6 +235,9 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
         if (entry == null) {
             return;
         }
+
+        log.debug("subscribe: {}, free workers: {}", remoteInterface, entry.getFreeWorkers());
+
         RFuture<String> take = requestQueue.pollAsync(60, TimeUnit.SECONDS);
         entry.setFuture(take);
         take.whenComplete((requestId, e) -> {
@@ -254,15 +259,12 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
                     return;
                 }
 
-                // do not subscribe now, see
-                // https://github.com/mrniko/redisson/issues/493
-                // subscribe(remoteInterface, requestQueue);
-                
-                if (entry.getCounter().get() == 0) {
+                if (entry.getFreeWorkers().get() == 0) {
                     return;
                 }
-                
-                if (entry.getCounter().decrementAndGet() > 0) {
+
+                int freeWorkers = entry.getFreeWorkers().decrementAndGet();
+                if (freeWorkers > 0) {
                     subscribe(remoteInterface, requestQueue, executor, bean);
                 }
 
@@ -383,17 +385,27 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
                     log.error("Can't process the remote service request with id {}", requestId, exc);
                     return null;
                 });
+        }).exceptionally(exc -> {
+            if (commandExecutor.getServiceManager().isShuttingDown(exc)) {
+                return null;
+            }
+            log.error("Can't process the remote service request", exc);
+            return null;
         });
     }
-    
+
+    private final Map<RemoteServiceKey, Method> methodsCache = new ConcurrentHashMap<>();
+
     private <T> RFuture<RRemoteServiceResponse> executeMethod(Class<T> remoteInterface, RBlockingQueue<String> requestQueue,
             ExecutorService executor, RemoteServiceRequest request, Object bean) {
-        RemoteServiceMethod method = Arrays.stream(remoteInterface.getMethods())
-                .filter(m -> m.getName().equals(request.getMethodName())
-                                && Arrays.equals(getMethodSignature(m), request.getSignature()))
-                .map(m -> new RemoteServiceMethod(m, bean))
-                .findFirst().get();
 
+        RemoteServiceKey key = new RemoteServiceKey(remoteInterface, request.getMethodName(), request.getSignature());
+        Method rm = methodsCache.computeIfAbsent(key, k -> Arrays.stream(k.getServiceInterface().getMethods())
+                                                          .filter(m -> m.getName().equals(k.getMethodName())
+                                                                         && Arrays.equals(getMethodSignature(m), k.getSignature()))
+                                                          .findFirst().get());
+
+        RemoteServiceMethod method = new RemoteServiceMethod(rm, bean);
         String responseName = getResponseQueueName(request.getExecutorId());
 
         CompletableFuture<RRemoteServiceResponse> responsePromise = new CompletableFuture<>();
@@ -408,6 +420,7 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
                 if (request.getOptions().getExecutionTimeoutInMillis() != null) {
                     timeout = request.getOptions().getExecutionTimeoutInMillis();
                 }
+                long tt = timeout;
 
                 RBlockingQueueAsync<RRemoteServiceResponse> queue = getBlockingQueue(responseName, codec);
                 try {
@@ -419,8 +432,9 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
                     } else {
                         response = result;
                     }
-                    RFuture<Void> clientsFuture = queue.putAsync(response);
-                    queue.expireAsync(timeout, TimeUnit.MILLISECONDS);
+
+                    CompletionStage<?> clientsFuture = queue.putAsync(response)
+                            .thenCompose(s -> queue.expireAsync(Duration.ofMillis(tt)));
 
                     clientsFuture.whenComplete((res, exc) -> {
                         if (exc != null) {
@@ -445,8 +459,14 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
                 return;
             }
 
+            log.debug("start execution. requestId: {}, method: {}", request.getId(), method);
+
             invokeMethod(request, method, cancelRequestFuture, responsePromise);
+
+            log.debug("end execution. requestId: {}, method: {}", request.getId(), method);
         });
+
+        log.debug("task submitted. requestId: {}, method: {}", request.getId(), method);
 
         cancelRequestFuture.thenAccept(r -> {
             boolean res = submitFuture.cancel(r.isMayInterruptIfRunning());
@@ -490,7 +510,10 @@ public class RedissonRemoteService extends BaseRemoteService implements RRemoteS
     private <T> void resubscribe(Class<T> remoteInterface, RBlockingQueue<String> requestQueue,
             ExecutorService executor, Object bean) {
         Entry entry = remoteMap.get(remoteInterface);
-        if (entry != null && entry.getCounter().getAndIncrement() == 0) {
+
+        log.debug("resubscribe: {}, queue: {}", remoteInterface, requestQueue.getName());
+
+        if (entry != null && entry.getFreeWorkers().getAndIncrement() == 0) {
             // re-subscribe anyways after the method invocation
             subscribe(remoteInterface, requestQueue, executor, bean);
         }

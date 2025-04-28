@@ -23,7 +23,6 @@ import org.redisson.api.options.*;
 import org.redisson.client.codec.Codec;
 import org.redisson.codec.JsonCodec;
 import org.redisson.config.Config;
-import org.redisson.config.ConfigSupport;
 import org.redisson.connection.ConnectionManager;
 import org.redisson.eviction.EvictionScheduler;
 import org.redisson.liveobject.core.RedissonObjectBuilder;
@@ -32,6 +31,7 @@ import org.redisson.reactive.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -41,35 +41,21 @@ import java.util.List;
  * @author Nikita Koksharov
  *
  */
-public class RedissonReactive implements RedissonReactiveClient {
+public final class RedissonReactive implements RedissonReactiveClient {
 
-    protected final WriteBehindService writeBehindService;
-    protected final EvictionScheduler evictionScheduler;
-    protected final CommandReactiveExecutor commandExecutor;
-    protected final ConnectionManager connectionManager;
+    private final WriteBehindService writeBehindService;
+    private final EvictionScheduler evictionScheduler;
+    private final CommandReactiveExecutor commandExecutor;
+    private final ConnectionManager connectionManager;
 
-    @Deprecated
-    protected RedissonReactive(Config config) {
-        Config configCopy = new Config(config);
-
-        connectionManager = ConfigSupport.createConnectionManager(configCopy);
-        RedissonObjectBuilder objectBuilder = null;
-        if (config.isReferenceEnabled()) {
-            objectBuilder = new RedissonObjectBuilder(this);
-        }
-        commandExecutor = new CommandReactiveService(connectionManager, objectBuilder);
-        evictionScheduler = new EvictionScheduler(commandExecutor);
-        writeBehindService = new WriteBehindService(commandExecutor);
-    }
-
-    protected RedissonReactive(ConnectionManager connectionManager, EvictionScheduler evictionScheduler,
-                               WriteBehindService writeBehindService) {
+    RedissonReactive(ConnectionManager connectionManager, EvictionScheduler evictionScheduler,
+                     WriteBehindService writeBehindService) {
         this.connectionManager = connectionManager;
         RedissonObjectBuilder objectBuilder = null;
         if (connectionManager.getServiceManager().getCfg().isReferenceEnabled()) {
             objectBuilder = new RedissonObjectBuilder(this);
         }
-        commandExecutor = new CommandReactiveService(connectionManager, objectBuilder);
+        commandExecutor = CommandReactiveExecutor.create(connectionManager, objectBuilder);
         this.evictionScheduler = evictionScheduler;
         this.writeBehindService = writeBehindService;
     }
@@ -254,6 +240,11 @@ public class RedissonReactive implements RedissonReactiveClient {
                             .map(l -> new RedissonLock(commandExecutor, l.getName()))
                             .toArray(RLock[]::new);
         return ReactiveProxyBuilder.create(commandExecutor, new RedissonMultiLock(ls), RLockReactive.class);
+    }
+
+    @Override
+    public RLockReactive getMultiLock(String group, Collection<Object> values) {
+        return ReactiveProxyBuilder.create(commandExecutor, new RedissonFasterMultiLock(commandExecutor, group, values), RLockReactive.class);
     }
 
     @Override
@@ -553,6 +544,29 @@ public class RedissonReactive implements RedissonReactiveClient {
     }
 
     @Override
+    public <K, V> RListMultimapCacheNativeReactive<K, V> getListMultimapCacheNative(String name) {
+        RedissonListMultimapCacheNative<K, V> listMultimap = new RedissonListMultimapCacheNative<>(commandExecutor, name);
+        return ReactiveProxyBuilder.create(commandExecutor, listMultimap,
+                new RedissonListMultimapCacheReactive<>(listMultimap, commandExecutor), RListMultimapCacheNativeReactive.class);
+    }
+
+    @Override
+    public <K, V> RListMultimapCacheNativeReactive<K, V> getListMultimapCacheNative(String name, Codec codec) {
+        RedissonListMultimapCacheNative<K, V> listMultimap = new RedissonListMultimapCacheNative<>(codec, commandExecutor, name);
+        return ReactiveProxyBuilder.create(commandExecutor, listMultimap,
+                new RedissonListMultimapCacheReactive<>(listMultimap, commandExecutor), RListMultimapCacheNativeReactive.class);
+    }
+
+    @Override
+    public <K, V> RListMultimapCacheNativeReactive<K, V> getListMultimapCacheNative(PlainOptions options) {
+        PlainParams params = (PlainParams) options;
+        CommandReactiveExecutor ca = commandExecutor.copy(params);
+        RedissonListMultimapCacheNative<K, V> listMultimap = new RedissonListMultimapCacheNative<>(params.getCodec(), ca, params.getName());
+        return ReactiveProxyBuilder.create(commandExecutor, listMultimap,
+                new RedissonListMultimapCacheReactive<>(listMultimap, ca), RListMultimapCacheNativeReactive.class);
+    }
+
+    @Override
     public <K, V> RSetMultimapCacheReactive<K, V> getSetMultimapCache(String name) {
         RedissonSetMultimapCache<K, V> setMultimap = new RedissonSetMultimapCache<>(evictionScheduler, commandExecutor, name);
         return ReactiveProxyBuilder.create(commandExecutor, setMultimap,
@@ -573,6 +587,29 @@ public class RedissonReactive implements RedissonReactiveClient {
         RedissonSetMultimapCache<K, V> setMultimap = new RedissonSetMultimapCache<>(evictionScheduler, params.getCodec(), ca, params.getName());
         return ReactiveProxyBuilder.create(commandExecutor, setMultimap,
                 new RedissonSetMultimapCacheReactive<K, V>(setMultimap, ca, this), RSetMultimapCacheReactive.class);
+    }
+
+    @Override
+    public <K, V> RSetMultimapCacheNativeReactive<K, V> getSetMultimapCacheNative(String name) {
+        RedissonSetMultimapCacheNative<K, V> setMultimap = new RedissonSetMultimapCacheNative<>(commandExecutor, name);
+        return ReactiveProxyBuilder.create(commandExecutor, setMultimap,
+                new RedissonSetMultimapCacheReactive<K, V>(setMultimap, commandExecutor, this), RSetMultimapCacheNativeReactive.class);
+    }
+
+    @Override
+    public <K, V> RSetMultimapCacheNativeReactive<K, V> getSetMultimapCacheNative(String name, Codec codec) {
+        RedissonSetMultimapCacheNative<K, V> setMultimap = new RedissonSetMultimapCacheNative<>(codec, commandExecutor, name);
+        return ReactiveProxyBuilder.create(commandExecutor, setMultimap,
+                new RedissonSetMultimapCacheReactive<K, V>(setMultimap, commandExecutor, this), RSetMultimapCacheNativeReactive.class);
+    }
+
+    @Override
+    public <K, V> RSetMultimapCacheNativeReactive<K, V> getSetMultimapCacheNative(PlainOptions options) {
+        PlainParams params = (PlainParams) options;
+        CommandReactiveExecutor ca = commandExecutor.copy(params);
+        RedissonSetMultimapCacheNative<K, V> setMultimap = new RedissonSetMultimapCacheNative<>(params.getCodec(), ca, params.getName());
+        return ReactiveProxyBuilder.create(commandExecutor, setMultimap,
+                new RedissonSetMultimapCacheReactive<K, V>(setMultimap, ca, this), RSetMultimapCacheNativeReactive.class);
     }
 
     @Override
@@ -1086,10 +1123,7 @@ public class RedissonReactive implements RedissonReactiveClient {
 
     @Override
     public <K, V> RLocalCachedMapReactive<K, V> getLocalCachedMap(String name, LocalCachedMapOptions<K, V> options) {
-        RMap<K, V> map = new RedissonLocalCachedMap<>(commandExecutor, name,
-                                                        options, evictionScheduler, null, writeBehindService);
-        return ReactiveProxyBuilder.create(commandExecutor, map,
-                new RedissonMapReactive<>(map, commandExecutor), RLocalCachedMapReactive.class);
+        return getLocalCachedMap(name, null, options);
     }
 
     @Override
@@ -1116,6 +1150,8 @@ public class RedissonReactive implements RedissonReactiveClient {
                 .storeCacheMiss(params.isStoreCacheMiss())
                 .timeToLive(params.getTimeToLiveInMillis())
                 .syncStrategy(LocalCachedMapOptions.SyncStrategy.valueOf(params.getSyncStrategy().toString()))
+                .useObjectAsCacheKey(params.isUseObjectAsCacheKey())
+                .useTopicPattern(params.isUseTopicPattern())
                 .expirationEventPolicy(LocalCachedMapOptions.ExpirationEventPolicy.valueOf(params.getExpirationEventPolicy().toString()))
                 .writer(params.getWriter())
                 .writerAsync(params.getWriterAsync())
@@ -1135,6 +1171,16 @@ public class RedissonReactive implements RedissonReactiveClient {
                 ops, evictionScheduler, null, writeBehindService);
         return ReactiveProxyBuilder.create(commandExecutor, map,
                 new RedissonMapReactive<>(map, ca), RLocalCachedMapReactive.class);
+    }
+
+    @Override
+    public <K, V> RLocalCachedMapCacheReactive<K, V> getLocalCachedMapCache(String name, LocalCachedMapCacheOptions<K, V> options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
+    }
+
+    @Override
+    public <K, V> RLocalCachedMapCacheReactive<K, V> getLocalCachedMapCache(String name, Codec codec, LocalCachedMapCacheOptions<K, V> options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
     }
 
     @Override

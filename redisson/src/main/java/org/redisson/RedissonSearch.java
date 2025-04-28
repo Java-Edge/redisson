@@ -32,7 +32,6 @@ import org.redisson.client.protocol.convertor.EmptyMapConvertor;
 import org.redisson.client.protocol.decoder.*;
 import org.redisson.codec.CompositeCodec;
 import org.redisson.command.CommandAsyncExecutor;
-import org.redisson.config.Protocol;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -49,6 +48,11 @@ public class RedissonSearch implements RSearch {
 
     private final Codec codec;
     private final CommandAsyncExecutor commandExecutor;
+
+    public RedissonSearch(CommandAsyncExecutor commandExecutor) {
+        this.codec = commandExecutor.getServiceManager().getCfg().getCodec();
+        this.commandExecutor = commandExecutor;
+    }
 
     public RedissonSearch(Codec codec, CommandAsyncExecutor commandExecutor) {
         this.codec = commandExecutor.getServiceManager().getCodec(codec);
@@ -119,10 +123,14 @@ public class RedissonSearch implements RSearch {
         if (options.isNoFreqs()) {
             args.add("NOFREQS");
         }
-        if (!options.getStopwords().isEmpty()) {
+        if (options.getStopwords() != null) {
             args.add("STOPWORDS");
-            args.add(options.getStopwords().size());
-            args.addAll(options.getStopwords());
+            if (options.getStopwords().isEmpty()) {
+                args.add(0);
+            } else {
+                args.add(options.getStopwords().size());
+                args.addAll(options.getStopwords());
+            }
         }
         if (options.isSkipInitialScan()) {
             args.add("SKIPINITIALSCAN");
@@ -476,6 +484,9 @@ public class RedissonSearch implements RSearch {
             if (options.getSortOrder() != null) {
                 args.add(options.getSortOrder());
             }
+            if (options.isWithCount()) {
+                args.add("WITHCOUNT");
+            }
         }
         if (options.getOffset() != null
                 && options.getCount() != null) {
@@ -484,6 +495,9 @@ public class RedissonSearch implements RSearch {
             args.add(options.getCount());
         }
         if (!options.getParams().isEmpty()) {
+            if (options.getDialect() == null || options.getDialect() < 2) {
+                throw new IllegalArgumentException("When use 'PARAMS', you should set DIALECT to 2 or greater than 2.");
+            }
             args.add("PARAMS");
             args.add(options.getParams().size()*2);
             for (Map.Entry<String, Object> entry : options.getParams().entrySet()) {
@@ -497,7 +511,7 @@ public class RedissonSearch implements RSearch {
         }
 
         RedisStrictCommand<SearchResult> command;
-        if (isResp3()) {
+        if (commandExecutor.getServiceManager().isResp3()) {
             command = new RedisStrictCommand<>("FT.SEARCH",
                     new ListMultiDecoder2(new SearchResultDecoderV2(),
                             new ObjectListReplayDecoder(),
@@ -511,10 +525,6 @@ public class RedissonSearch implements RSearch {
         }
 
         return commandExecutor.writeAsync(indexName, StringCodec.INSTANCE, command, args.toArray());
-    }
-
-    private boolean isResp3() {
-        return commandExecutor.getServiceManager().getCfg().getProtocol() == Protocol.RESP3;
     }
 
     private String value(double score, boolean exclusive) {
@@ -588,6 +598,9 @@ public class RedissonSearch implements RSearch {
                 args.add("MAX");
                 args.add(options.getSortedByMax());
             }
+            if (options.isSortedByWithCount()) {
+                args.add("WITHCOUNT");
+            }
         }
         for (Expression expression : options.getExpressions()) {
             args.add("APPLY");
@@ -633,7 +646,7 @@ public class RedissonSearch implements RSearch {
                                                  .mapToInt(g -> g.getReducers().size())
                                                  .sum();
         RedisStrictCommand<AggregationResult> command;
-        if (isResp3()) {
+        if (commandExecutor.getServiceManager().isResp3()) {
             if (options.isWithCursor()) {
                 command = new RedisStrictCommand<>("FT.AGGREGATE",
                         new ListMultiDecoder2(new AggregationCursorResultDecoderV2(),
@@ -760,7 +773,7 @@ public class RedissonSearch implements RSearch {
     @Override
     public RFuture<AggregationResult> readCursorAsync(String indexName, long cursorId) {
         RedisStrictCommand command;
-        if (isResp3()) {
+        if (commandExecutor.getServiceManager().isResp3()) {
             command = new RedisStrictCommand<>("FT.CURSOR", "READ",
                     new ListMultiDecoder2(new AggregationCursorResultDecoderV2(),
                             new ObjectListReplayDecoder(),
@@ -891,7 +904,7 @@ public class RedissonSearch implements RSearch {
         }
 
         RedisCommand<Map<String, Map<String, Object>>> command = RedisCommands.FT_SPELLCHECK;
-        if (isResp3()) {
+        if (commandExecutor.getServiceManager().isResp3()) {
             command = new RedisCommand<>("FT.SPELLCHECK",
                     new ListMultiDecoder2(
                             new ListObjectDecoder(1),

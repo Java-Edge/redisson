@@ -17,6 +17,7 @@ package org.redisson;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 
@@ -28,28 +29,33 @@ public class QueueTransferService {
     private final Map<String, QueueTransferTask> tasks = new ConcurrentHashMap<>();
     
     public void schedule(String name, QueueTransferTask task) {
-        QueueTransferTask oldTask = tasks.putIfAbsent(name, task);
-        if (oldTask == null) {
-            task.start();
-        } else {
-            oldTask.getLock().execute(() -> {
-                oldTask.incUsage();
-            });
-        }
+        tasks.compute(name, (k, t) -> {
+            if (t == null) {
+                task.start();
+                return task;
+            }
+            t.incUsage();
+            return t;
+        });
     }
     
     public void remove(String name) {
-        QueueTransferTask task = tasks.get(name);
-        if (task == null) {
-            return;
-        }
-
-        task.getLock().execute(() -> {
-            if (task.decUsage() == 0) {
-                tasks.remove(name, task);
-                task.stop();
+        AtomicReference<QueueTransferTask> ref = new AtomicReference<>();
+        tasks.compute(name, (k, task) -> {
+            if (task == null) {
+                return null;
             }
+
+            if (task.decUsage() == 0) {
+                ref.set(task);
+                return null;
+            }
+            return task;
         });
+
+        if (ref.get() != null) {
+            ref.get().stop();
+        }
     }
     
     

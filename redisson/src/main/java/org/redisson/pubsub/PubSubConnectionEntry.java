@@ -27,7 +27,6 @@ import org.redisson.connection.ConnectionManager;
 import org.redisson.connection.MasterSlaveEntry;
 import org.redisson.connection.ServiceManager;
 import org.redisson.misc.AsyncSemaphore;
-import org.redisson.misc.WrappedLock;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -38,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 
+ *
  * @author Nikita Koksharov
  *
  */
@@ -49,7 +48,6 @@ public class PubSubConnectionEntry {
 
     private final Map<ChannelName, SubscribeListener> subscribeChannelListeners = new ConcurrentHashMap<>();
     private final Map<ChannelName, Queue<RedisPubSubListener<?>>> channelListeners = new ConcurrentHashMap<>();
-    private final Map<ChannelName, WrappedLock> channelLocks = new ConcurrentHashMap<>();
 
     private static final Queue<RedisPubSubListener<?>> EMPTY_QUEUE = new LinkedList<>();
 
@@ -81,7 +79,7 @@ public class PubSubConnectionEntry {
     public int countListeners(ChannelName channelName) {
         return channelListeners.getOrDefault(channelName, EMPTY_QUEUE).size();
     }
-    
+
     public boolean hasListeners(ChannelName channelName) {
         return channelListeners.containsKey(channelName);
     }
@@ -95,22 +93,15 @@ public class PubSubConnectionEntry {
             return;
         }
 
-        Queue<RedisPubSubListener<?>> queue = channelListeners.computeIfAbsent(channelName, k -> new ConcurrentLinkedQueue<>());
-        WrappedLock lock = channelLocks.computeIfAbsent(channelName, k -> new WrappedLock());
-        boolean deleted = lock.execute(() -> {
-            if (channelListeners.get(channelName) != queue) {
-                return true;
-            } else {
-                queue.add(listener);
+        channelListeners.compute(channelName, (k, queue) -> {
+            if (queue == null) {
+                queue = new ConcurrentLinkedQueue<>();
             }
-            return false;
-        });
-        if (deleted) {
-            addListener(channelName, listener);
-            return;
-        }
 
-        conn.addListener(listener);
+            queue.add(listener);
+            conn.addListener(channelName, listener);
+            return queue;
+        });
     }
 
     // TODO optimize
@@ -132,11 +123,23 @@ public class PubSubConnectionEntry {
         }
         return false;
     }
-    
+
     public boolean removeListener(ChannelName channelName, int listenerId) {
         Queue<RedisPubSubListener<?>> listeners = channelListeners.getOrDefault(channelName, EMPTY_QUEUE);
         for (RedisPubSubListener<?> listener : listeners) {
-            if (System.identityHashCode(listener) == listenerId) {
+            if (listener instanceof PubSubMessageListener) {
+                if (hasId(((PubSubMessageListener<?>) listener).getListener(), listenerId)) {
+                    removeListener(channelName, listener);
+                    return true;
+                }
+            }
+            if (listener instanceof PubSubPatternMessageListener) {
+                if (hasId(((PubSubPatternMessageListener<?>) listener).getListener(), listenerId)) {
+                    removeListener(channelName, listener);
+                    return true;
+                }
+            }
+            if (hasId(listener, listenerId)) {
                 removeListener(channelName, listener);
                 return true;
             }
@@ -144,16 +147,19 @@ public class PubSubConnectionEntry {
         return false;
     }
 
+    private boolean hasId(EventListener listener, int listenerId) {
+        return System.identityHashCode(listener) == listenerId;
+    }
+
     public void removeListener(ChannelName channelName, RedisPubSubListener<?> listener) {
-        Queue<RedisPubSubListener<?>> queue = channelListeners.get(channelName);
-        WrappedLock lock = channelLocks.get(channelName);
-        lock.execute(() -> {
+        channelListeners.computeIfPresent(channelName, (k, queue) -> {
             if (queue.remove(listener) && queue.isEmpty()) {
-                channelListeners.remove(channelName);
-                channelLocks.remove(channelName);
+                return null;
             }
+            return queue;
         });
-        conn.removeListener(listener);
+
+        conn.removeListener(channelName, listener);
     }
 
     public int tryAcquire() {
@@ -162,7 +168,7 @@ public class PubSubConnectionEntry {
             if (value == 0) {
                 return -1;
             }
-            
+
             if (subscribedChannelsAmount.compareAndSet(value, value - 1)) {
                 return value - 1;
             }
@@ -177,14 +183,20 @@ public class PubSubConnectionEntry {
         return subscribedChannelsAmount.get() == serviceManager.getConfig().getSubscriptionsPerConnection();
     }
 
-    public void subscribe(Codec codec, ChannelName channelName, CompletableFuture<PubSubConnectionEntry> pm,
+    public void subscribe(Codec codec, List<ChannelName> channelNames, CompletableFuture<PubSubConnectionEntry> pm,
                           PubSubType type, AsyncSemaphore lock, RedisPubSubListener<?>[] listeners) {
         CompletableFuture<PubSubConnectionEntry> pp = new CompletableFuture<>();
         pp.whenComplete((r, e) -> {
             if (e != null) {
                 PubSubType unsubscribeType = SUBSCRIBE2UNSUBSCRIBE.get(type);
-                CompletableFuture<Codec> f = subscribeService.unsubscribe(channelName, this, unsubscribeType);
-                f.whenComplete((rr, ee) -> {
+
+                List<CompletableFuture<?>> futures = new ArrayList<>(channelNames.size());
+                for (ChannelName channelName : channelNames) {
+                    CompletableFuture<?> f = subscribeService.unsubscribe(channelName, this, unsubscribeType);
+                    futures.add(f);
+                }
+                CompletableFuture<Void> ff = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+                ff.whenComplete((rr, ee) -> {
                     pm.completeExceptionally(e);
                 });
                 return;
@@ -193,7 +205,7 @@ public class PubSubConnectionEntry {
             pm.complete(r);
         });
 
-        CompletableFuture<Void> subscribeFuture = addListeners(channelName, pp, type, lock, listeners);
+        CompletableFuture<Void> subscribeFuture = addListeners(channelNames, pp, type, lock, listeners);
         CompletableFuture<Void> promise = new CompletableFuture<>();
         promise.whenComplete((r, ex) -> {
             if (ex != null) {
@@ -203,11 +215,11 @@ public class PubSubConnectionEntry {
 
         ChannelFuture future;
         if (PubSubType.SUBSCRIBE == type) {
-            future = conn.subscribe(promise, codec, channelName);
+            future = conn.subscribe(promise, codec, channelNames.toArray(new ChannelName[0]));
         } else if (PubSubType.SSUBSCRIBE == type) {
-            future = conn.ssubscribe(promise, codec, channelName);
+            future = conn.ssubscribe(promise, codec, channelNames.toArray(new ChannelName[0]));
         } else {
-            future = conn.psubscribe(promise, codec, channelName);
+            future = conn.psubscribe(promise, codec, channelNames.toArray(new ChannelName[0]));
         }
         future.addListener((ChannelFutureListener) future1 -> {
             if (!future1.isSuccess()) {
@@ -226,20 +238,20 @@ public class PubSubConnectionEntry {
     private SubscribeListener getSubscribeFuture(ChannelName channel, PubSubType type) {
         return subscribeChannelListeners.computeIfAbsent(channel, k -> {
             SubscribeListener listener = new SubscribeListener(channel, type);
-            conn.addListener(listener);
+            conn.addListener(channel, listener);
             return listener;
         });
     }
-    
+
     public void unsubscribe(PubSubType commandType, ChannelName channel, RedisPubSubListener<?> listener) {
         AtomicBoolean executed = new AtomicBoolean();
-        conn.addListener(new BaseRedisPubSubListener() {
+        conn.addListener(channel, new BaseRedisPubSubListener() {
             @Override
             public void onStatus(PubSubType type, CharSequence ch) {
                 if (type == commandType && channel.equals(ch)) {
                     executed.set(true);
 
-                    conn.removeListener(this);
+                    conn.removeListener(channel, this);
                     removeListeners(channel);
                     if (listener != null) {
                         listener.onStatus(type, ch);
@@ -265,18 +277,16 @@ public class PubSubConnectionEntry {
 
     private void removeListeners(ChannelName channel) {
         conn.removeDisconnectListener(channel);
+
         SubscribeListener s = subscribeChannelListeners.remove(channel);
-        conn.removeListener(s);
-        Queue<RedisPubSubListener<?>> queue = channelListeners.get(channel);
-        if (queue != null) {
-            WrappedLock lock = channelLocks.get(channel);
-            lock.execute(() -> {
-                channelListeners.remove(channel);
-                channelLocks.remove(channel);
-            });
-            for (RedisPubSubListener<?> listener : queue) {
-                conn.removeListener(listener);
-            }
+        conn.removeListener(channel, s);
+
+        Queue<RedisPubSubListener<?>> queue = channelListeners.remove(channel);
+        if (queue == null) {
+            return;
+        }
+        for (RedisPubSubListener<?> listener : queue) {
+            conn.removeListener(channel, listener);
         }
     }
 
@@ -289,16 +299,22 @@ public class PubSubConnectionEntry {
         return "PubSubConnectionEntry [subscribedChannelsAmount=" + subscribedChannelsAmount + ", conn=" + conn + "]";
     }
 
-    public CompletableFuture<Void> addListeners(ChannelName channelName,
-                                                 CompletableFuture<PubSubConnectionEntry> promise,
-                                                 PubSubType type, AsyncSemaphore lock,
-                                                 RedisPubSubListener<?>... listeners) {
-        for (RedisPubSubListener<?> listener : listeners) {
-            addListener(channelName, listener);
-        }
-        SubscribeListener list = getSubscribeFuture(channelName, type);
-        CompletableFuture<Void> subscribeFuture = list.getSuccessFuture();
+    public CompletableFuture<Void> addListeners(List<ChannelName> channelNames,
+                                                CompletableFuture<PubSubConnectionEntry> promise,
+                                                PubSubType type, AsyncSemaphore lock,
+                                                RedisPubSubListener<?>... listeners) {
+        List<CompletableFuture<Void>> futures = new ArrayList<>(channelNames.size());
+        for (ChannelName channelName : channelNames) {
+            for (RedisPubSubListener<?> listener : listeners) {
+                addListener(channelName, listener);
+            }
 
+            SubscribeListener list = getSubscribeFuture(channelName, type);
+            CompletableFuture<Void> subscribeFuture = list.getSuccessFuture();
+            futures.add(subscribeFuture);
+        }
+
+        CompletableFuture<Void> subscribeFuture = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
         subscribeFuture.whenComplete((res, e) -> {
             if (e != null) {
                 promise.completeExceptionally(e);
@@ -307,22 +323,49 @@ public class PubSubConnectionEntry {
             }
 
             if (!promise.complete(this)) {
-                for (RedisPubSubListener<?> listener : listeners) {
-                    removeListener(channelName, listener);
+                List<CompletableFuture<Void>> ffs = new ArrayList<>();
+                for (ChannelName channelName : channelNames) {
+                    for (RedisPubSubListener<?> listener : listeners) {
+                        removeListener(channelName, listener);
+                    }
+                    if (!hasListeners(channelName)) {
+                        CompletableFuture<Void> f = subscribeService.unsubscribeLocked(type, channelName, this);
+                        ffs.add(f);
+                    }
                 }
-                if (!hasListeners(channelName)) {
-                    subscribeService.unsubscribeLocked(type, channelName, this)
-                            .whenComplete((r, ex) -> {
-                                lock.release();
-                            });
-                } else {
+
+                CompletableFuture<Void> ff = CompletableFuture.allOf(ffs.toArray(new CompletableFuture[0]));
+                ff.thenAccept(r -> {
                     lock.release();
-                }
+                });
             } else {
                 lock.release();
             }
         });
         return subscribeFuture;
+    }
+
+    public CompletableFuture<Void> addListeners(ChannelName channelName,
+                                                PubSubType type,
+                                                RedisPubSubListener<?>... listeners) {
+        for (RedisPubSubListener<?> listener : listeners) {
+            addListener(channelName, listener);
+        }
+        SubscribeListener list = getSubscribeFuture(channelName, type);
+        return list.getSuccessFuture();
+    }
+
+    public CompletableFuture<Void> release(PubSubType type, ChannelName channelName, RedisPubSubListener<?>... listeners) {
+        List<CompletableFuture<Void>> ffs = new ArrayList<>();
+        for (RedisPubSubListener<?> listener : listeners) {
+            removeListener(channelName, listener);
+        }
+        if (!hasListeners(channelName)) {
+            CompletableFuture<Void> f = subscribeService.unsubscribeLocked(type, channelName, this);
+            ffs.add(f);
+        }
+
+        return CompletableFuture.allOf(ffs.toArray(new CompletableFuture[0]));
     }
 
 }

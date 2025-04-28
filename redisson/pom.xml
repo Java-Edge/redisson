@@ -4,20 +4,20 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-parent</artifactId>
-        <version>3.34.2-SNAPSHOT</version>
+        <version>3.45.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
     <artifactId>redisson</artifactId>
 
     <name>Redisson</name>
-    <description>Easy Redis Java client and Real-Time Data Platform. Valkey compatible. Sync/Async/RxJava3/Reactive API. Client side caching. Over 50 Redis based Java objects and services: JCache API, Apache Tomcat, Hibernate, Spring, Set, Multimap, SortedSet, Map, List, Queue, Deque, Semaphore, Lock, AtomicLong, Map Reduce, Bloom filter, Scheduler, RPC</description>
-    <inceptionYear>2014</inceptionYear>
-    <url>http://redisson.org</url>
+    <description>Valkey and Redis Java client. Complete Real-Time Data Platform. Sync/Async/RxJava/Reactive API. Over 50 Valkey and Redis based Java objects and services: JCache API, Apache Tomcat, Hibernate, Spring, Set, Multimap, SortedSet, Map, List, Queue, Deque, Semaphore, Lock, AtomicLong, Map Reduce, Bloom filter, Scheduler, RPC</description>
+    <inceptionYear>2013</inceptionYear>
+    <url>https://redisson.pro</url>
 
     <organization>
        <name>Redisson</name>
-       <url>http://redisson.org/</url>
+       <url>https://redisson.pro/</url>
     </organization>
 
     <profiles>
@@ -150,19 +150,19 @@
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>
             <artifactId>tomcat-embed-core</artifactId>
-            <version>10.1.25</version>
+            <version>10.1.39</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>
             <artifactId>tomcat-embed-jasper</artifactId>
-            <version>10.1.25</version>
+            <version>10.1.39</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.tomcat</groupId>
             <artifactId>tomcat-jasper</artifactId>
-            <version>10.1.25</version>
+            <version>10.1.39</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -175,35 +175,35 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-test</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-core</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-expression</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>
             <!-- 4.1+ -->            
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-compress</artifactId>
-            <version>1.26.2</version>
+            <version>1.27.1</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -239,7 +239,14 @@
         <dependency>
             <groupId>org.xerial.snappy</groupId>
             <artifactId>snappy-java</artifactId>
-            <version>1.1.10.5</version>
+            <version>1.1.10.7</version>
+            <scope>provided</scope>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>1.5.6-7</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -259,12 +266,12 @@
         <dependency>
             <groupId>com.esotericsoftware</groupId>
             <artifactId>kryo</artifactId>
-            <version>5.6.0</version>
+            <version>5.6.2</version>
         </dependency>
         <dependency>
           <groupId>org.apache.fury</groupId>
           <artifactId>fury-core</artifactId>
-          <version>0.7.0</version>
+          <version>0.8.0</version>
           <scope>provided</scope>
           <optional>true</optional>
         </dependency>
@@ -329,18 +336,18 @@
         <dependency>
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
-            <version>1.14.17</version>
+            <version>1.15.3</version>
         </dependency>
         <dependency>
             <groupId>org.jodd</groupId>
             <artifactId>jodd-util</artifactId>
-            <version>6.2.2</version>
+            <version>6.3.0</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -348,7 +355,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-beans</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -356,7 +363,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-context-support</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -364,7 +371,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -373,7 +380,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.6</version>
+            <version>6.1.14</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -413,7 +420,7 @@
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
-            <version>3.6.7</version>
+            <version>3.6.11</version>
             <scope>test</scope>
         </dependency>
 
@@ -432,14 +439,14 @@
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>4.27.2</version>
+            <version>4.29.3</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java-util</artifactId>
-            <version>4.27.2</version>
+            <version>4.29.3</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -470,24 +477,13 @@
 -->
 
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <testSource>21</testSource>
-                    <testTarget>21</testTarget>
-                    <testRelease>21</testRelease>
-                </configuration>
-            </plugin>
-
-            <plugin>
          	<artifactId>maven-javadoc-plugin</artifactId>
             </plugin>
 
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-pmd-plugin</artifactId>
-                <version>3.22.0</version>
+                <version>3.25.0</version>
                 <executions>
                     <execution>
                         <phase>verify</phase>
@@ -506,29 +502,7 @@
             </plugin>
 
             <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.4.0</version>
-                <executions>
-                    <execution>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <consoleOutput>true</consoleOutput>
-                    <configLocation>/checkstyle.xml</configLocation>
-                    <propertyExpansion>checkstyle.config.path=${basedir}</propertyExpansion>
-                </configuration>
-                <dependencies>
-                    <dependency>
-                       <groupId>com.puppycrawl.tools</groupId>
-                       <artifactId>checkstyle</artifactId>
-                       <version>10.16.0</version>
-                  </dependency>
-                </dependencies>
             </plugin>
 
             <plugin>
@@ -547,9 +521,10 @@
                             <exclude>RedissonLocalCachedMapSerializationCodecTest</exclude>
                         </excludes>
 
-                        <forkCount>4</forkCount>
-                        <reuseForks>true</reuseForks>
-                        <argLine>${argLine} -javaagent:"${settings.localRepository}"/com/github/hazendaz/jmockit/jmockit/1.52.0/jmockit-1.52.0.jar</argLine>
+                        <trimStackTrace>true</trimStackTrace>
+                        <forkCount>6</forkCount>
+                        <reuseForks>false</reuseForks>
+                        <argLine>${argLine} -javaagent:"${settings.localRepository}"/com/github/hazendaz/jmockit/jmockit/1.54.0/jmockit-1.54.0.jar</argLine>
                     </configuration>
             </plugin>
 
@@ -593,35 +568,6 @@
             <plugin>
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
-                <version>4.5</version>
-                <configuration>
-                    <basedir>${basedir}</basedir>
-                    <header>${basedir}/../header.txt</header>
-                    <quiet>false</quiet>
-                    <failIfMissing>true</failIfMissing>
-                    <aggregate>false</aggregate>
-                    <includes>
-                        <include>src/main/java/org/redisson/</include>
-                    </includes>
-                    <excludes>
-                        <exclude>target/**</exclude>
-                    </excludes>
-                    <useDefaultExcludes>true</useDefaultExcludes>
-                    <mapping>
-                        <java>JAVADOC_STYLE</java>
-                        <xsd>XML_STYLE</xsd>
-                    </mapping>
-                    <strictCheck>true</strictCheck>
-                    <useDefaultMapping>true</useDefaultMapping>
-                    <encoding>UTF-8</encoding>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
         </plugins>
     </build>

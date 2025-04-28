@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-parent</artifactId>
-        <version>3.34.2-SNAPSHOT</version>
+        <version>3.45.2-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
@@ -18,6 +18,24 @@
         <module>redisson-helidon-30</module>
         <module>redisson-helidon-40</module>
     </modules>
+
+    <build>
+        <plugins>
+            <plugin>
+                <artifactId>maven-javadoc-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+            </plugin>
+
+            <plugin>
+                <groupId>com.mycila</groupId>
+                <artifactId>license-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
 
     <dependencies>
         <dependency>
