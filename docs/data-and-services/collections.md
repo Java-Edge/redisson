@@ -1,5 +1,5 @@
 ## Map
-Redis or Valkey based distributed [Map](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMap.html) object for Java implements [ConcurrentMap](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentMap.html) interface. This object is thread-safe. Consider to use [Live Object service](services.md/#live-object-service) to store POJO object as Redis or Valkey Map. Redis or Valkey uses serialized state to check key uniqueness instead of key's `hashCode()`/`equals()` methods.
+Java implementation of Valkey or Redis based [Map](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMap.html) object for Java implements [ConcurrentMap](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/ConcurrentMap.html) interface. This object is thread-safe. Consider to use [Live Object service](services.md/#live-object-service) to store POJO object as Valkey or Redis Map. Valkey or Redis uses serialized state to check key uniqueness instead of key's `hashCode()`/`equals()` methods.
 
 If Map used mostly for read operations and/or network roundtrips are undesirable use Map with [Local cache](#eviction-local-cache-and-data-partitioning) support.
 
@@ -71,7 +71,7 @@ Available implementations:
 
 **2. Scripted eviction** 
 
-Allows to define `time to live` or `max idle time` parameters per map entry. Eviction is done on Redisson side through a custom scheduled task which removes expired entries using Lua script. Eviction task is started once per unique object name at the moment of getting Map instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Redis or Valkey calls and eviction task per unique map object name. 
+Allows to define `time to live` or `max idle time` parameters per map entry. Eviction is done on Redisson side through a custom scheduled task which removes expired entries using Lua script. Eviction task is started once per unique object name at the moment of getting Map instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Valkey or Redis calls and eviction task per unique map object name. 
 
 Entries are cleaned time to time by `org.redisson.eviction.EvictionScheduler`. By default, it removes 100 expired entries at a time. This can be changed through [cleanUpKeysAmount](../configuration.md) setting. Task launch time tuned automatically and depends on expired entries amount deleted in previous time and varies between 5 second to 30 minutes by default. This time interval can be changed through [minCleanUpDelay](../configuration.md) and [maxCleanUpDelay](../configuration.md). For example, if clean task deletes 100 entries each time it will be executed every 5 seconds (minimum execution delay). But if current expired entries amount is lower than previous one then execution delay will be increased by 1.5 times and decreased otherwise.
 
@@ -90,7 +90,7 @@ Available implementations:
 
 **3. Advanced eviction**
 
-Allows to define `time to live` parameter per map entry. Doesn't use an entry eviction task, entries are cleaned on Redis or Valkey side.
+Allows to define `time to live` parameter per map entry. Doesn't use an entry eviction task, entries are cleaned on Valkey or Redis side.
 
 Each object implements [RMapCacheV2](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMapCacheV2.html), [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMapCacheV2Async.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMapCacheV2Reactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMapCacheV2Rx.html) interfaces.
 
@@ -163,8 +163,8 @@ Follow options can be supplied during object creation:
 
       // Defines store mode of cache data.
       // Follow options are available:
-      // LOCALCACHE - store data in local cache only and use Redis or Valkey only for data update/invalidation.
-      // LOCALCACHE_REDIS - store data in both Redis or Valkey and local cache.
+      // LOCALCACHE - store data in local cache only and use Valkey or Redis only for data update/invalidation.
+      // LOCALCACHE_REDIS - store data in both Valkey or Redis and local cache.
       .storeMode(StoreMode.LOCALCACHE_REDIS)
 
       // Defines Cache provider used as local cache store.
@@ -210,7 +210,7 @@ Follow options can be supplied during object creation:
       // max idle time for each map entry in local cache
      .maxIdle(Duration.ofSeconds(10))
 
-     // Defines how to listen expired event sent by Redis or Valkey upon this instance deletion
+     // Defines how to listen expired event sent by Valkey or Redis upon this instance deletion
      //
      // Follow expiration policies are available:
      // DONT_SUBSCRIBE - Don't subscribe on expire event
@@ -299,7 +299,7 @@ map.fastRemove("321");
 
 ### Persistence
 
-Redisson allows to store Map data in external storage along with Redis or Valkey store.  
+Redisson allows to store Map data in external storage along with Valkey or Redis store.  
 Use cases:
 
 1. Redisson Map object as a cache between an application and external storage.
@@ -455,15 +455,15 @@ RLocalCachedMapCache<K, V> map = redisson.getLocalCachedMapCache("test", mcoptio
 
 This feature available for `RMap`, `RMapCache`, `RLocalCachedMap` and `RLocalCachedMapCache` objects.
 
-Usage of `RLocalCachedMap` and `RLocalCachedMapCache` objects boost Redis or Valkey read-operations up to **45x times** and give almost instant speed for database, web service or any other data source.
+Usage of `RLocalCachedMap` and `RLocalCachedMapCache` objects boost Valkey or Redis read-operations up to **45x times** and give almost instant speed for database, web service or any other data source.
 
 ### Listeners
 
-Redisson allows binding listeners per `RMap` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RMap` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 `RMap` object allows to track follow events over the data.
 
-|Listener class name|Event description | Redis or Valkey<br/>`notify-keyspace-events` value|
+|Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
 |org.redisson.api.listener.TrackingListener|Entry created/removed/updated after read operation| - |
 |org.redisson.api.listener.MapPutListener|Entry created/updated|Eh|
@@ -514,6 +514,9 @@ map.removeListener(listenerId);
 |org.redisson.api.map.event.EntryExpiredListener|Entry expired|
 |org.redisson.api.map.event.EntryRemovedListener|Entry removed|
 |org.redisson.api.map.event.EntryUpdatedListener|Entry updated|
+
+!!! note "Important" 
+    For optimization purposes, RMapCache entry events are emitted only when there are registered listeners. This means that listener registration affects the internal map state.
 
 Usage examples:
 
@@ -570,7 +573,7 @@ map.removeListener(listenerId);
 ### LRU/LFU bounded Map
 Map object which implements `RMapCache` interface could be bounded using [Least Recently Used (LRU)](https://en.wikipedia.org/wiki/Cache_replacement_policies#LRU) or [Least Frequently Used (LFU)](https://en.wikipedia.org/wiki/Least_frequently_used) order. Bounded Map allows to store map entries within defined limit and retire entries in defined order. 
 
-Use cases: limited Redis or Valkey memory.
+Use cases: limited Valkey or Redis memory.
 
 ```java
 RMapCache<String, SomeObject> map = redisson.getMapCache("anyMap");
@@ -601,7 +604,7 @@ map.put("3", "3", 1, TimeUnit.SECONDS);
 ```
 
 ## Multimap
-Redis or Valkey based [Multimap](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMultimap.html) for Java allows to bind multiple values per key. This object is thread-safe. Keys amount limited to `4 294 967 295` elements. Redis or Valkey uses serialized state to check key uniqueness instead of key's `hashCode()`/`equals()` methods.
+Java implementation of Valkey or Redis based [Multimap](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMultimap.html) object for  allows to store multiple values per key. Keys amount limited to `4 294 967 295` elements. Valkey and Redis use serialized key state to its uniqueness instead of key's `hashCode()`/`equals()` methods. This object is thread-safe.
 
 It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMultimapAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMultimapReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RMultimapRx.html) interfaces.
 
@@ -638,31 +641,105 @@ List<SimpleValue> removedValues = map.removeAll(new SimpleKey("0"));
 ```
 
 ### Eviction
-Multimap distributed object for Java with eviction support implemented by separated MultimapCache object. There are [RSetMultimapCache](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSetMultimapCache.html) and [RListMultimapCache](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RListMultimapCache.html) objects for Set and List based Multimaps respectively.  
+Multimap entries eviction implemented by a separate MultimapCache object. There are [RSetMultimapCache](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSetMultimapCache.html) and [RListMultimapCache](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RListMultimapCache.html) objects for Set and List based Multimaps respectively.  
 
-Eviction task is started once per unique object name at the moment of getting Multimap instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Redis or Valkey calls and eviction task per unique map object name. 
+Eviction task is started once per unique object name at the moment of getting Multimap instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Valkey or Redis calls and eviction task per unique map object name. 
 
 Entries are cleaned time to time by `org.redisson.eviction.EvictionScheduler`. By default, it removes 100 expired entries at a time. This can be changed through [cleanUpKeysAmount](../configuration.md) setting. Task launch time tuned automatically and depends on expired entries amount deleted in previous time and varies between 5 second to 30 minutes by default. This time interval can be changed through [minCleanUpDelay](../configuration.md) and [maxCleanUpDelay](../configuration.md). For example, if clean task deletes 100 entries each time it will be executed every 5 seconds (minimum execution delay). But if current expired entries amount is lower than previous one then execution delay will be increased by 1.5 times and decreased otherwise.
 
-RSetMultimapCache example:
-```java
-RSetMultimapCache<String, String> multimap = redisson.getSetMultimapCache("myMultimap");
-multimap.put("1", "a");
-multimap.put("1", "b");
-multimap.put("1", "c");
+Redis 7.4.0 and higher version implements native eviction. It's supported by [RSetMultimapCacheNative](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RSetMultimapCacheNative.html) and [RListMultimapCacheNative](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RListMultimapCacheNative.html) objects.
 
-multimap.put("2", "e");
-multimap.put("2", "f");
+Code examples:
 
-multimap.expireKey("2", 10, TimeUnit.MINUTES);
+=== "Sync"
+	```java
+	// scripted eviction implementation
+	RSetMultimapCache<String, String> multimap = redisson.getSetMultimapCache("myMultimap");
 
-// if object is not used anymore
-multimap.destroy();
-```
+	// native eviction implementation
+	RSetMultimapCacheNative<String, String> multimap = redisson.getSetMultimapCacheNative("myMultimap");
+
+	multimap.put("1", "a");
+	multimap.put("1", "b");
+	multimap.put("1", "c");
+
+	multimap.put("2", "e");
+	multimap.put("2", "f");
+
+	multimap.expireKey("2", 10, TimeUnit.MINUTES);
+
+	// if object is not used anymore
+	multimap.destroy();
+	```
+=== "Async"
+	```java
+	// scripted eviction implementation
+	RSetMultimapCacheAsync<String, String> multimap = redisson.getSetMultimapCache("myMultimap");
+
+	// native eviction implementation
+	RSetMultimapCacheNativeAsync<String, String> multimap = redisson.getSetMultimapCacheNative("myMultimap");
+
+	RFuture<Boolean> f1 = multimap.putAsync("1", "a");
+	RFuture<Boolean> f2 = multimap.putAsync("1", "b");
+	RFuture<Boolean> f3 = multimap.putAsync("1", "c");
+
+	RFuture<Boolean> f4 = multimap.putAsync("2", "e");
+	RFuture<Boolean> f5 = multimap.putAsync("2", "f");
+
+	RFuture<Boolean> exfeature = multimap.expireKeyAsync("2", 10, TimeUnit.MINUTES);
+
+	// if object is not used anymore
+	multimap.destroy();
+	```
+=== "Reactive"
+    ```java
+	RedissonReactiveClient redissonReactive = redisson.reactive();
+	
+	// scripted eviction implementation
+	RSetMultimapCacheReactive<String, String> multimap = redissonReactive.getSetMultimapCache("myMultimap");
+
+	// native eviction implementation
+	RSetMultimapCacheNativeReactive<String, String> multimap = redissonReactive.getSetMultimapCacheNative("myMultimap");
+	
+	Mono<Boolean> f1 = multimap.put("1", "a");
+	Mono<Boolean> f2 = multimap.put("1", "b");
+	Mono<Boolean> f3 = multimap.put("1", "c");
+
+	Mono<Boolean> f4 = multimap.put("2", "e");
+	Mono<Boolean> f5 = multimap.put("2", "f");
+
+	Mono<Boolean> exfeature = multimap.expireKey("2", 10, TimeUnit.MINUTES);
+
+	// if object is not used anymore
+	multimap.destroy();
+    ```
+=== "RxJava3"
+    ```java
+	RedissonRxClient redissonRx = redisson.rxJava();
+	
+	// scripted eviction implementation
+	RSetMultimapCacheRx<String, String> multimap = redissonReactive.getSetMultimapCache("myMultimap");
+
+	// native eviction implementation
+	RSetMultimapCacheNativeRx<String, String> multimap = redissonReactive.getSetMultimapCacheNative("myMultimap");
+	
+	Single<Boolean> f1 = multimap.put("1", "a");
+	Single<Boolean> f2 = multimap.put("1", "b");
+	Single<Boolean> f3 = multimap.put("1", "c");
+
+	Single<Boolean> f4 = multimap.put("2", "e");
+	Single<Boolean> f5 = multimap.put("2", "f");
+
+	Single<Boolean> exfeature = multimap.expireKey("2", 10, TimeUnit.MINUTES);
+
+	// if object is not used anymore
+	multimap.destroy();
+    ```
+
 
 ### Listeners
 
-Redisson allows binding listeners per `RSetMultimap` or `RListMultimap` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RSetMultimap` or `RListMultimap` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 `RSetMultimap` listeners:
 
@@ -708,9 +785,9 @@ lmap.removeListener(listenerId);
 
 _This feature is available only in [Redisson PRO](https://redisson.pro/feature-comparison.html) edition._
 
-[RJsonStore](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RJsonStore.html) is a distributed Key Value store for JSON objects. Compatible with Redis or Valkey. This object is thread-safe. Allows to store JSON value mapped by key. Operations can be executed per key or group of keys. Value is stored/retrieved using `JSON.*` commands. Both key and value are POJO objects. 
+[RJsonStore](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RJsonStore.html) is a distributed Key Value store for JSON objects. Compatible with Valkey and Redis. This object is thread-safe. Allows to store JSON value mapped by key. Operations can be executed per key or group of keys. Value is stored/retrieved using `JSON.*` commands. Both key and value are POJO objects. 
 
-Allows to define `time to live` parameter per entry. Doesn't use an entry eviction task, entries are cleaned on Redis or Valkey side.
+Allows to define `time to live` parameter per entry. Doesn't use an entry eviction task, entries are cleaned on Valkey or Redis side.
 
 Code example of **[Async](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RJsonStoreAsync.html) interface** usage:
 
@@ -857,8 +934,8 @@ Follow options can be supplied during object creation:
 
       // Defines store mode of cache data.
       // Follow options are available:
-      // LOCALCACHE - store data in local cache only and use Redis or Valkey only for data update/invalidation.
-      // LOCALCACHE_REDIS - store data in both Redis or Valkey and local cache.
+      // LOCALCACHE - store data in local cache only and use Valkey or Redis only for data update/invalidation.
+      // LOCALCACHE_REDIS - store data in both Valkey or Redis and local cache.
       .storeMode(StoreMode.LOCALCACHE_REDIS)
 
       // Defines Cache provider used as local cache store.
@@ -900,7 +977,7 @@ Follow options can be supplied during object creation:
       // max idle time for each entry in local cache
      .maxIdle(Duration.ofSeconds(10));
 
-     // Defines how to listen expired event sent by Redis or Valkey upon this instance deletion
+     // Defines how to listen expired event sent by Valkey or Redis upon this instance deletion
      //
      // Follow expiration policies are available:
      // DONT_SUBSCRIBE - Don't subscribe on expire event
@@ -977,7 +1054,7 @@ boolean status = store.delete("2");
 ```
 
 ## Set
-Redis or Valkey based [Set](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSet.html) object for Java implements [Set](https://docs.oracle.com/javase/8/docs/api/java/util/Set.html) interface. This object is thread-safe. Keeps elements uniqueness via element state comparison. Set size limited to `4 294 967 295` elements. Redis or Valkey uses serialized state to check value uniqueness instead of value's `hashCode()`/`equals()` methods.
+Valkey or Redis based [Set](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSet.html) object for Java implements [Set](https://docs.oracle.com/javase/8/docs/api/java/util/Set.html) interface. This object is thread-safe. Keeps elements uniqueness via element state comparison. Set size limited to `4 294 967 295` elements. Valkey or Redis uses serialized state to check value uniqueness instead of value's `hashCode()`/`equals()` methods.
 
 It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSetAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSetReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSetRx.html) interfaces.
 
@@ -1005,7 +1082,7 @@ Redisson provides various Set structure implementations with a few important fea
 
 **data partitioning** - although any Set object is cluster compatible its content isn't scaled/partitioned across multiple master nodes in cluster. Data partitioning allows to scale available memory, read/write operations and entry eviction process for individual Set instance in cluster.  
 
-**entry eviction** - allows to define `time to live` parameter per SetCache entry. Redis or Valkey set structure doesn't support eviction thus it's done on Redisson side through a custom scheduled task which removes expired entries using Lua script. Eviction task is started once per unique object name at the moment of getting SetCache instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Redis or Valkey calls and eviction task per unique SetCache object name. 
+**entry eviction** - allows to define `time to live` parameter per SetCache entry. Valkey or Redis set structure doesn't support eviction thus it's done on Redisson side through a custom scheduled task which removes expired entries using Lua script. Eviction task is started once per unique object name at the moment of getting SetCache instance. If instance isn't used and has expired entries it should be get again to start the eviction process. This leads to extra Valkey or Redis calls and eviction task per unique SetCache object name. 
 
 Entries are cleaned time to time by `org.redisson.eviction.EvictionScheduler`. By default, it removes 100 expired entries at a time. This can be changed through [cleanUpKeysAmount](../configuration.md) setting. Task launch time tuned automatically and depends on expired entries amount deleted in previous time and varies between 5 second to 30 minutes by default. This time interval can be changed through [minCleanUpDelay](../configuration.md) and [maxCleanUpDelay](../configuration.md). For example, if clean task deletes 100 entries each time it will be executed every 5 seconds (minimum execution delay). But if current expired entries amount is lower than previous one then execution delay will be increased by 1.5 times and decreased otherwise.
 
@@ -1056,7 +1133,7 @@ Below is the list of all available Set implementations:
 
 ### Listeners
 
-Redisson allows binding listeners per `RSet` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RSet` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 |Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
@@ -1085,7 +1162,7 @@ set.removeListener(listenerId);
 ```
 
 ## SortedSet
-Redis or Valkey based distributed [SortedSet](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSortedSet.html) for Java implements [SortedSet](https://docs.oracle.com/javase/8/docs/api/java/util/SortedSet.html) interface. This object is thread-safe. It uses comparator to sort elements and keep uniqueness. For String data type it's recommended to use [LexSortedSet](#lexsortedset) object due to performance gain.
+Valkey or Redis based distributed [SortedSet](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RSortedSet.html) for Java implements [SortedSet](https://docs.oracle.com/javase/8/docs/api/java/util/SortedSet.html) interface. This object is thread-safe. It uses comparator to sort elements and keep uniqueness. For String data type it's recommended to use [LexSortedSet](#lexsortedset) object due to performance gain.
 ```java
 RSortedSet<Integer> set = redisson.getSortedSet("anySet");
 set.trySetComparator(new MyComparator()); // set object comparator
@@ -1097,7 +1174,7 @@ set.removeAsync(0);
 set.addAsync(5);
 ```
 ## ScoredSortedSet
-Redis or Valkey based distributed [ScoredSortedSet](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RScoredSortedSet.html) object. Sorts elements by score defined during element insertion. Keeps elements uniqueness via element state comparison. 
+Valkey or Redis based distributed [ScoredSortedSet](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RScoredSortedSet.html) object. Sorts elements by score defined during element insertion. Keeps elements uniqueness via element state comparison. 
 
 It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RScoredSortedSetAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RScoredSortedSetReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RScoredSortedSetRx.html) interfaces. Set size is limited to `4 294 967 295` elements.
 ```java
@@ -1139,7 +1216,7 @@ ScoredEntry<String> e = set.pollFirstEntry();
 
 ### Listeners
 
-Redisson allows binding listeners per `RScoredSortedSet` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RScoredSortedSet` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 |Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
@@ -1167,7 +1244,7 @@ set.removeListener(listenerId);
 ```
 
 ## LexSortedSet
-Redis or Valkey based distributed [Set](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RLexSortedSet.html) object for Java allows String objects only and implements `java.util.Set<String>` interface. It keeps elements in lexicographical order and maintain elements uniqueness via element state comparison. 
+Valkey or Redis based distributed [Set](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RLexSortedSet.html) object for Java allows String objects only and implements `java.util.Set<String>` interface. It keeps elements in lexicographical order and maintain elements uniqueness via element state comparison. 
 
 It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RLexSortedSetAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RLexSortedSetReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RLexSortedSetRx.html) interfaces.
 ```java
@@ -1183,7 +1260,7 @@ set.range("d", true, "z", false);
 
 ### Listeners
 
-Redisson allows binding listeners per `RLexSortedSet` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RLexSortedSet` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 |Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
@@ -1211,7 +1288,7 @@ set.removeListener(listenerId);
 ```
 
 ## List
-Redis or Valkey based distributed [List](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RList.html) object for Java implements `java.util.List` interface. It keeps elements in insertion order. 
+Valkey or Redis based distributed [List](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RList.html) object for Java implements `java.util.List` interface. It keeps elements in insertion order. 
 
 It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RListAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RListReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RListRx.html) interfaces. List size is limited to `4 294 967 295` elements.
 ```java
@@ -1223,7 +1300,7 @@ list.remove(new SomeObject());
 
 ### Listeners
 
-Redisson allows binding listeners per `RList` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RList` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 |Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
@@ -1254,690 +1331,8 @@ list.removeListener(listenerId);
 ```
 
 
-## Queue
-Redis or Valkey based distributed unbounded [Queue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RQueue.html) object for Java implements [java.util.Queue](https://docs.oracle.com/javase/8/docs/api/java/util/Queue.html) interface. This object is thread-safe.  
-
-It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RQueueAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RQueueReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RQueueRx.html) interfaces.
-
-```java
-RQueue<SomeObject> queue = redisson.getQueue("anyQueue");
-queue.add(new SomeObject());
-SomeObject obj = queue.peek();
-SomeObject someObj = queue.poll();
-```
-
-### Listeners
-
-Redisson allows binding listeners per `RQueue` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
-
-|Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
-|:--:|:--:|:--:|
-|org.redisson.api.listener.TrackingListener|Element created/removed/updated after read operation|-|
-|org.redisson.api.listener.ListAddListener|Element created|El|
-|org.redisson.api.listener.ListRemoveListener|Element removed|El|
-|org.redisson.api.ExpiredObjectListener|`RQueue` object expired|Ex|
-|org.redisson.api.DeletedObjectListener|`RQueue` object deleted|Eg|
-
-Usage example:
-
-```java
-RQueue<String> queue = redisson.getQueue("anyList");
-
-int listenerId = queue.addListener(new DeletedObjectListener() {
-     @Override
-     public void onDeleted(String name) {
-        // ...
-     }
-});
-
-// ...
-
-queue.removeListener(listenerId);
-```
-
-## Deque
-Redis or Valkey based distributed unbounded [Deque](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RDeque.html) object for Java implements `java.util.Deque` interface. This object is thread-safe.  
-
-It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RDequeAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RDequeReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RDequeRx.html) interfaces.
-```java
-RDeque<SomeObject> queue = redisson.getDeque("anyDeque");
-queue.addFirst(new SomeObject());
-queue.addLast(new SomeObject());
-SomeObject obj = queue.removeFirst();
-SomeObject someObj = queue.removeLast();
-```
-
-### Listeners
-
-Redisson allows binding listeners per `RDeque` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
-
-|Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
-|:--:|:--:|:--:|
-|org.redisson.api.listener.TrackingListener|Element created/removed/updated after read operation|-|
-|org.redisson.api.listener.ListAddListener|Element created|El|
-|org.redisson.api.listener.ListRemoveListener|Element removed|El|
-|org.redisson.api.ExpiredObjectListener|`RDeque` object expired|Ex|
-|org.redisson.api.DeletedObjectListener|`RDeque` object deleted|Eg|
-
-Usage example:
-
-```java
-RDeque<String> deque = redisson.getDeque("anyList");
-
-int listenerId = deque.addListener(new DeletedObjectListener() {
-     @Override
-     public void onDeleted(String name) {
-        // ...
-     }
-});
-
-// ...
-
-deque.removeListener(listenerId);
-```
-
-## Blocking Queue
-Redis or Valkey based distributed unbounded [BlockingQueue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingQueue.html) object for Java implements `java.util.concurrent.BlockingQueue` interface. This object is thread-safe.  
-
-It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingQueueAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingQueueReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingQueueRx.html) interfaces.
-
-```java
-RBlockingQueue<SomeObject> queue = redisson.getBlockingQueue("anyQueue");
-
-queue.offer(new SomeObject());
-
-SomeObject obj = queue.peek();
-SomeObject obj = queue.poll();
-SomeObject obj = queue.poll(10, TimeUnit.MINUTES);
-```
-`poll`, `pollFromAny`, `pollLastAndOfferFirstTo` and `take` methods are resubscribed automatically during re-connection to server or failover.
-
-## Bounded Blocking Queue
-Redis or Valkey based distributed [BoundedBlockingQueue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBoundedBlockingQueue.html) for Java implements `java.util.concurrent.BlockingQueue` interface. BoundedBlockingQueue size limited to `4 294 967 295` elements. This object is thread-safe.
-
-Queue capacity should be defined once by `trySetCapacity()` method before the usage:
-```java
-RBoundedBlockingQueue<SomeObject> queue = redisson.getBoundedBlockingQueue("anyQueue");
-// returns `true` if capacity set successfully and `false` if it already set.
-queue.trySetCapacity(2);
-
-queue.offer(new SomeObject(1));
-queue.offer(new SomeObject(2));
-// will be blocked until free space available in queue
-queue.put(new SomeObject());
-
-SomeObject obj = queue.peek();
-SomeObject someObj = queue.poll();
-SomeObject ob = queue.poll(10, TimeUnit.MINUTES);
-```
-
-`poll`, `pollFromAny`, `pollLastAndOfferFirstTo` and `take` methods will be resubscribed automatically during reconnection to server or failover.
-
-## Blocking Deque
-Java implementation of Redis or Valkey based [BlockingDeque](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingDeque.html) implements `java.util.concurrent.BlockingDeque` interface. This object is thread-safe.
-
-It has [Async](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingDequeAsync.html), [Reactive](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingDequeReactive.html) and [RxJava3](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RBlockingDequeRx.html) interfaces.
-
-```java
-RBlockingDeque<Integer> deque = redisson.getBlockingDeque("anyDeque");
-deque.putFirst(1);
-deque.putLast(2);
-Integer firstValue = queue.takeFirst();
-Integer lastValue = queue.takeLast();
-Integer firstValue = queue.pollFirst(10, TimeUnit.MINUTES);
-Integer lastValue = queue.pollLast(3, TimeUnit.MINUTES);
-```
-`poll`, `pollFromAny`, `pollLastAndOfferFirstTo` and `take` methods are resubscribed automatically during re-connection to server or failover.
-
-## Delayed Queue
-Redis or Valkey based [DelayedQueue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RDelayedQueue.html) object for Java allows to transfer each element to destination queue with specified delay. Destination queue could be any queue implemented `RQueue` interface. This object is thread-safe.  
-
-Could be useful for exponential backoff strategy used for message delivery to consumer. If application is restarted, an instance of delayed queue should created in order for the pending items to be added to the destination queue.
-
-```java
-RBlockingQueue<String> destinationQueue = ...
-RDelayedQueue<String> delayedQueue = getDelayedQueue(destinationQueue);
-// move object to destinationQueue in 10 seconds
-delayedQueue.offer("msg1", 10, TimeUnit.SECONDS);
-// move object to destinationQueue in 1 minutes
-delayedQueue.offer("msg2", 1, TimeUnit.MINUTES);
-
-
-// msg1 will appear in 10 seconds
-destinationQueue.poll(15, TimeUnit.SECONDS);
-
-// msg2 will appear in 2 seconds
-destinationQueue.poll(2, TimeUnit.SECONDS);
-
-```
-
-Object should be destroyed if it not used anymore, but it's not necessary to call destroy method if Redisson goes shutdown.
-```java
-RDelayedQueue<String> delayedQueue = ...
-delayedQueue.destroy();
-```
-
-## Priority Queue
-Java implementation of Redis or Valkey based [PriorityQueue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RPriorityQueue.html) implements [java.util.Queue](https://docs.oracle.com/javase/8/docs/api/java/util/Queue.html) interface. Elements are ordered according to natural order of [Comparable](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) interface or defined [Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). This object is thread-safe.  
-
-Use `trySetComparator()` method to define own [Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). 
-
-Code example:
-```java
-public class Entry implements Comparable<Entry>, Serializable {
-
-    private String key;
-    private Integer value;
-
-    public Entry(String key, Integer value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    @Override
-    public int compareTo(Entry o) {
-        return key.compareTo(o.key);
-    }
-
-}
-
-RPriorityQueue<Entry> queue = redisson.getPriorityQueue("anyQueue");
-queue.add(new Entry("b", 1));
-queue.add(new Entry("c", 1));
-queue.add(new Entry("a", 1));
-
-// Entry [a:1]
-Entry e = queue.poll();
-// Entry [b:1]
-Entry e = queue.poll();
-// Entry [c:1]
-Entry e = queue.poll();
-```
-
-## Priority Deque
-Java implementation of Redis or Valkey based [PriorityDeque](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RPriorityDeque.html) implements [java.util.Deque](https://docs.oracle.com/javase/8/docs/api/java/util/Deque.html) interface. Elements are ordered according to natural order of [java.lang.Comparable](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) interface or defined [java.util.Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). This object is thread-safe.  
-
-Use `trySetComparator()` method to define own [Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). 
-
-Code example:
-```java
-public class Entry implements Comparable<Entry>, Serializable {
-
-    private String key;
-    private Integer value;
-
-    public Entry(String key, Integer value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    @Override
-    public int compareTo(Entry o) {
-        return key.compareTo(o.key);
-    }
-
-}
-
-RPriorityDeque<Entry> queue = redisson.getPriorityDeque("anyQueue");
-queue.add(new Entry("b", 1));
-queue.add(new Entry("c", 1));
-queue.add(new Entry("a", 1));
-
-// Entry [a:1]
-Entry e = queue.pollFirst();
-// Entry [c:1]
-Entry e = queue.pollLast();
-```
-
-## Priority Blocking Queue
-Java implementation of Redis or Valkey based [PriorityBlockingQueue](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RPriorityBlockingQueue.html) similar to JDK [java.util.concurrent.PriorityBlockingQueue](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/PriorityBlockingQueue.html) object. Elements are ordered according to natural order of [java.lang.Comparable](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) interface or defined [java.util.Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). This object is thread-safe.  
-
-Use `trySetComparator()` method to define own [java.util.Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). 
-
-`poll`, `pollLastAndOfferFirstTo` and `take` methods are resubscribed automatically during re-connection to a server or failover.
-
-Code example:
-```java
-public class Entry implements Comparable<Entry>, Serializable {
-
-    private String key;
-    private Integer value;
-
-    public Entry(String key, Integer value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    @Override
-    public int compareTo(Entry o) {
-        return key.compareTo(o.key);
-    }
-
-}
-
-RPriorityBlockingQueue<Entry> queue = redisson.getPriorityBlockingQueue("anyQueue");
-queue.add(new Entry("b", 1));
-queue.add(new Entry("c", 1));
-queue.add(new Entry("a", 1));
-
-// Entry [a:1]
-Entry e = queue.take();
-```
-
-## Priority Blocking Deque
-Java implementation of Redis or Valkey based [PriorityBlockingDeque](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RPriorityBlockingDeque.html) implements [java.util.concurrent.BlockingDeque](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/BlockingDeque.html) interface. Elements are ordered according to natural order of [java.lang.Comparable](https://docs.oracle.com/javase/8/docs/api/java/lang/Comparable.html) interface or defined [java.util.Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). This object is thread-safe.  
-
-Use `trySetComparator()` method to define own [java.util.Comparator](https://docs.oracle.com/javase/8/docs/api/java/util/Comparator.html). 
-
-`poll`, `pollLastAndOfferFirstTo`, `take` methods are resubscribed automatically during re-connection to Redis or Valkey server or failover.
-
-Code example:
-```java
-public class Entry implements Comparable<Entry>, Serializable {
-
-    private String key;
-    private Integer value;
-
-    public Entry(String key, Integer value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    @Override
-    public int compareTo(Entry o) {
-        return key.compareTo(o.key);
-    }
-
-}
-
-RPriorityBlockingDeque<Entry> queue = redisson.getPriorityBlockingDeque("anyQueue");
-queue.add(new Entry("b", 1));
-queue.add(new Entry("c", 1));
-queue.add(new Entry("a", 1));
-
-// Entry [a:1]
-Entry e = queue.takeFirst();
-// Entry [c:1]
-Entry e = queue.takeLast();
-```
-
-## Stream
-Java implementation of Redis or Valkey based [Stream](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RStream.html) object wraps [Stream](https://redis.io/topics/streams-intro) feature. Basically it allows to create Consumers Group which consume data added by Producers. This object is thread-safe.  
-
-```java
-RStream<String, String> stream = redisson.getStream("test");
-
-StreamMessageId sm = stream.add(StreamAddArgs.entry("0", "0"));
-
-stream.createGroup("testGroup");
-        
-StreamId id1 = stream.add(StreamAddArgs.entry("1", "1"));
-StreamId id2 = stream.add(StreamAddArgs.entry("2", "2"));
-        
-Map<StreamId, Map<String, String>> group = stream.readGroup("testGroup", "consumer1", StreamReadGroupArgs.neverDelivered());
-
-// return entries in pending state after read group method execution
-Map<StreamMessageId, Map<String, String>> pendingData = stream.pendingRange("testGroup", "consumer1", StreamMessageId.MIN, StreamMessageId.MAX, 100);
-
-// transfer ownership of pending messages to a new consumer
-List<StreamMessageId> transferedIds = stream.fastClaim("testGroup", "consumer2", 1, TimeUnit.MILLISECONDS, id1, id2);
-
-// mark pending entries as correctly processed
-long amount = stream.ack("testGroup", id1, id2);
-```
-
-Code example of **[Async interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RStreamAsync.html)** usage:
-
-```java
-RStream<String, String> stream = redisson.getStream("test");
-
-RFuture<StreamMessageId> smFuture = stream.addAsync(StreamAddArgs.entry("0", "0"));
-
-RFuture<Void> groupFuture = stream.createGroupAsync("testGroup");
-        
-RFuture<StreamId> id1Future = stream.addAsync(StreamAddArgs.entry("1", "1"));
-RFuture<StreamId> id2Future = stream.addAsync(StreamAddArgs.entry("2", "2"));
-        
-RFuture<Map<StreamId, Map<String, String>>> groupResultFuture = stream.readGroupAsync("testGroup", "consumer1", StreamReadGroupArgs.neverDelivered());
-
-// return entries in pending state after read group method execution
-RFuture<Map<StreamMessageId, Map<String, String>>> pendingDataFuture = stream.pendingRangeAsync("testGroup", "consumer1", StreamMessageId.MIN, StreamMessageId.MAX, 100);
-
-// transfer ownership of pending messages to a new consumer
-RFuture<List<StreamMessageId>> transferedIdsFuture = stream.fastClaim("testGroup", "consumer2", 1, TimeUnit.MILLISECONDS, id1, id2);
-
-// mark pending entries as correctly processed
-RFuture<Long> amountFuture = stream.ackAsync("testGroup", id1, id2);
-
-amountFuture.whenComplete((res, exception) -> {
-    // ...
-});
-```
-
-Code example of **[Reactive interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RStreamReactive.html)** usage:
-
-```java
-RedissonReactiveClient redisson = redissonClient.reactive();
-RStreamReactive<String, String> stream = redisson.getStream("test");
-
-Mono<StreamMessageId> smMono = stream.add(StreamAddArgs.entry("0", "0"));
-
-Mono<Void> groupMono = stream.createGroup("testGroup");
-        
-Mono<StreamId> id1Mono = stream.add(StreamAddArgs.entry("1", "1"));
-Mono<StreamId> id2Mono = stream.add(StreamAddArgs.entry("2", "2"));
-        
-Mono<Map<StreamId, Map<String, String>>> groupMono = stream.readGroup("testGroup", "consumer1", StreamReadGroupArgs.neverDelivered());
-
-// return entries in pending state after read group method execution
-Mono<Map<StreamMessageId, Map<String, String>>> pendingDataMono = stream.pendingRange("testGroup", "consumer1", StreamMessageId.MIN, StreamMessageId.MAX, 100);
-
-// transfer ownership of pending messages to a new consumer
-Mono<List<StreamMessageId>> transferedIdsMono = stream.fastClaim("testGroup", "consumer2", 1, TimeUnit.MILLISECONDS, id1, id2);
-
-// mark pending entries as correctly processed
-Mono<Long> amountMono = stream.ack("testGroup", id1, id2);
-
-amountMono.doOnNext(res -> {
-   // ...
-}).subscribe();
-```
-
-Code example of **[RxJava3 interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RStreamRx.html)** usage:
-
-```java
-RedissonRxClient redisson = redissonClient.rxJava();
-RStreamRx<String, String> stream = redisson.getStream("test");
-
-Single<StreamMessageId> smRx = stream.add(StreamAddArgs.entry("0", "0"));
-
-Completable groupRx = stream.createGroup("testGroup");
-        
-Single<StreamId> id1Rx = stream.add(StreamAddArgs.entry("1", "1"));
-Single<StreamId> id2Rx = stream.add(StreamAddArgs.entry("2", "2"));
-        
-Single<Map<StreamId, Map<String, String>>> groupRx = stream.readGroup("testGroup", "consumer1", StreamReadGroupArgs.neverDelivered());
-
-// return entries in pending state after read group method execution
-Single<Map<StreamMessageId, Map<String, String>>> pendingDataRx = stream.pendingRange("testGroup", "consumer1", StreamMessageId.MIN, StreamMessageId.MAX, 100);
-
-// transfer ownership of pending messages to a new consumer
-Single<List<StreamMessageId>> transferedIdsRx = stream.fastClaim("testGroup", "consumer2", 1, TimeUnit.MILLISECONDS, id1, id2);
-
-// mark pending entries as correctly processed
-Single<Long> amountRx = stream.ack("testGroup", id1, id2);
-
-amountRx.doOnSuccess(res -> {
-   // ...
-}).subscribe();
-```
-
-### Listeners
-
-Redisson allows binding listeners per `RStream` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
-
-|Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
-|:--:|:--:|:--:|
-|org.redisson.api.listener.TrackingListener|Element added/removed/updated after read operation|-|
-|org.redisson.api.ExpiredObjectListener|`RStream` object expired|Ex|
-|org.redisson.api.DeletedObjectListener|`RStream` object deleted|Eg|
-|org.redisson.api.listener.StreamAddListener|Element added|Et|
-|org.redisson.api.listener.StreamRemoveListener|Element removed|Et|
-|org.redisson.api.listener.StreamCreateGroupListener|Group created|Et|
-|org.redisson.api.listener.StreamRemoveGroupListener|Group removed|Et|
-|org.redisson.api.listener.StreamCreateConsumerListener|Consumer created|Et|
-|org.redisson.api.listener.StreamRemoveConsumerListener|Consumer removed|Et|
-|org.redisson.api.listener.StreamTrimListener|Stream trimmed|Et|
-
-Usage example:
-
-```java
-RStream<String, String> stream = redisson.getStream("anySet");
-
-int listenerId = stream.addListener(new DeletedObjectListener() {
-     @Override
-     public void onDeleted(String name) {
-        // ...
-     }
-});
-
-int listenerId = stream.addListener(new StreamAddListener() {
-    @Override
-    public void onAdd(String name) {
-        // ...
-    }
-});
-
-
-// ...
-
-stream.removeListener(listenerId);
-```
-
-## Ring Buffer
-
-Java implementation of Redis or Valkey based [RingBuffer](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RRingBuffer.html) implements [java.util.Queue](https://docs.oracle.com/javase/8/docs/api/java/util/Queue.html) interface. This structure evicts elements from the head if queue capacity became full. This object is thread-safe.  
-
-Should be initialized with capacity size by `trySetCapacity()` method before usage. 
-
-Code example:
-
-```java
-RRingBuffer<Integer> buffer = redisson.getRingBuffer("test");
-
-// buffer capacity is 4 elements
-buffer.trySetCapacity(4);
-
-buffer.add(1);
-buffer.add(2);
-buffer.add(3);
-buffer.add(4);
-
-// buffer state is 1, 2, 3, 4
-
-buffer.add(5);
-buffer.add(6);
-
-// buffer state is 3, 4, 5, 6
-```
-
-Code example of **[Async interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RRingBufferAsync.html)** usage:
-
-```java
-RRingBuffer<Integer> buffer = redisson.getRingBuffer("test");
-
-// buffer capacity is 4 elements
-RFuture<Boolean> capacityFuture = buffer.trySetCapacityAsync(4);
-
-RFuture<Boolean> addFuture = buffer.addAsync(1);
-RFuture<Boolean> addFuture = buffer.addAsync(2);
-RFuture<Boolean> addFuture = buffer.addAsync(3);
-RFuture<Boolean> addFuture = buffer.addAsync(4);
-
-// buffer state is 1, 2, 3, 4
-
-RFuture<Boolean> addFuture = buffer.addAsync(5);
-RFuture<Boolean> addFuture = buffer.addAsync(6);
-
-// buffer state is 3, 4, 5, 6
-
-addFuture.whenComplete((res, exception) -> {
-    // ...
-});
-```
-
-Code example of **[Reactive interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RRingBufferReactive.html)** usage:
-
-```java
-RedissonReactiveClient redisson = redissonClient.reactive();
-RRingBufferReactive<Integer> buffer = redisson.getRingBuffer("test");
-
-// buffer capacity is 4 elements
-Mono<Boolean> capacityMono = buffer.trySetCapacity(4);
-
-Mono<Boolean> addMono = buffer.add(1);
-Mono<Boolean> addMono = buffer.add(2);
-Mono<Boolean> addMono = buffer.add(3);
-Mono<Boolean> addMono = buffer.add(4);
-
-// buffer state is 1, 2, 3, 4
-
-Mono<Boolean> addMono = buffer.add(5);
-Mono<Boolean> addMono = buffer.add(6);
-
-// buffer state is 3, 4, 5, 6
-
-addMono.doOnNext(res -> {
-   // ...
-}).subscribe();
-```
-
-Code example of **[RxJava3 interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RRingBufferRx.html)** usage:
-
-```java
-RedissonRxClient redisson = redissonClient.rxJava();
-RRingBufferRx<Integer> buffer = redisson.getRingBuffer("test");
-
-// buffer capacity is 4 elements
-Single<Boolean> capacityRx = buffer.trySetCapacity(4);
-
-Single<Boolean> addRx = buffer.add(1);
-Single<Boolean> addRx = buffer.add(2);
-Single<Boolean> addRx = buffer.add(3);
-Single<Boolean> addRx = buffer.add(4);
-
-// buffer state is 1, 2, 3, 4
-
-Single<Boolean> addRx = buffer.add(5);
-Single<Boolean> addRx = buffer.add(6);
-
-// buffer state is 3, 4, 5, 6
-
-addRx.doOnSuccess(res -> {
-   // ...
-}).subscribe();
-```
-
-### Listeners
-
-Redisson allows binding listeners per `RRingBuffer` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
-
-|Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
-|:--:|:--:|:--:|
-|org.redisson.api.listener.TrackingListener|Element created/removed/updated after read operation|-|
-|org.redisson.api.listener.ListAddListener|Element created|El|
-|org.redisson.api.listener.ListRemoveListener|Element removed|El|
-|org.redisson.api.ExpiredObjectListener|`RRingBuffer` object expired|Ex|
-|org.redisson.api.DeletedObjectListener|`RRingBuffer` object deleted|Eg|
-
-Usage example:
-
-```java
-RRingBuffer<String> queue = redisson.getRingBuffer("anyList");
-
-int listenerId = queue.addListener(new DeletedObjectListener() {
-     @Override
-     public void onDeleted(String name) {
-        // ...
-     }
-});
-
-// ...
-
-queue.removeListener(listenerId);
-```
-
-
-## Transfer Queue
-
-Java implementation of Redis or Valkey based [TransferQueue](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RTransferQueue.html) implements [java.util.concurrent.TransferQueue](https://docs.oracle.com/javase/8/docs/api/java/util/concurrent/TransferQueue.html) interface. Provides set of `transfer` methods which return only when value was successfully hand off to consumer. This object is thread-safe.  
-
-`poll` and `take` methods are resubscribed automatically during re-connection to a server or failover.
-
-Code example:
-```java
-RTransferQueue<String> queue = redisson.getTransferQueue("myCountDownLatch");
-
-queue.transfer("data");
-// or try transfer immediately
-queue.tryTransfer("data");
-// or try transfer up to 10 seconds
-queue.tryTransfer("data", 10, TimeUnit.SECONDS);
-
-// in other thread or JVM
-
-queue.take();
-// or
-queue.poll();
-```
-
-Code example of **[Async interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RTransferQueueAsync.html)** usage:
-```java
-RTransferQueue<String> queue = redisson.getTransferQueue("myCountDownLatch");
-
-RFuture<Void> future = queue.transferAsync("data");
-// or try transfer immediately
-RFuture<Boolean> future = queue.tryTransferAsync("data");
-// or try transfer up to 10 seconds
-RFuture<Boolean> future = queue.tryTransferAsync("data", 10, TimeUnit.SECONDS);
-
-// in other thread or JVM
-
-RFuture<String> future = queue.takeAsync();
-// or
-RFuture<String> future = queue.pollAsync();
-
-future.whenComplete((res, exception) -> {
-    // ...
-});
-```
-
-Code example of **[Reactive interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RTransferQueueReactive.html)** usage:
-```java
-RedissonReactiveClient redisson = redissonClient.reactive();
-RTransferQueueReactive<String> queue = redisson.getTransferQueue("myCountDownLatch");
-
-Mono<Void> mono = queue.transfer("data");
-// or try transfer immediately
-Mono<Boolean> mono = queue.tryTransfer("data");
-// or try transfer up to 10 seconds
-Mono<Boolean> mono = queue.tryTransfer("data", 10, TimeUnit.SECONDS);
-
-// in other thread or JVM
-
-Mono<String> mono = queue.take();
-// or
-Mono<String> mono = queue.poll();
-
-mono.doOnNext(res -> {
-   // ...
-}).subscribe();
-```
-
-Code example of **[RxJava3 interface](https://static.javadoc.io/org.redisson/redisson/latest/org/redisson/api/RTransferQueueRx.html)** usage:
-```java
-RedissonRxClient redisson = redissonClient.rxJava();
-RTransferQueueRx<String> queue = redisson.getTransferQueue("myCountDownLatch");
-
-Completable res = queue.transfer("data");
-// or try transfer immediately
-Single<Boolean> resRx = queue.tryTransfer("data");
-// or try transfer up to 10 seconds
-Single<Boolean> resRx = queue.tryTransfer("data", 10, TimeUnit.SECONDS);
-
-// in other thread or JVM
-
-Single<String> resRx = queue.take();
-// or
-Maybe<String> resRx = queue.poll();
-
-resRx.doOnSuccess(res -> {
-   // ...
-}).subscribe();
-```
-
 ## Time Series
-Java implementation of Redis or Valkey based [TimeSeries](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RTimeSeries.html) object allows to store value by timestamp and define TTL(time-to-live) per entry. Values are ordered by timestamp. This object is thread-safe.  
+Java implementation of Valkey or Redis based [TimeSeries](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RTimeSeries.html) object allows to store value by timestamp and define TTL(time-to-live) per entry. Values are ordered by timestamp. This object is thread-safe.  
 
 Code example:
 ```java
@@ -2035,7 +1430,7 @@ rx.doOnSuccess(res -> {
 
 ### Listeners
 
-Redisson allows binding listeners per `RTimeSeries` object. This requires the `notify-keyspace-events` setting to be enabled on Redis or Valkey side.
+Redisson allows binding listeners per `RTimeSeries` object. This requires the `notify-keyspace-events` setting to be enabled on Valkey or Redis side.
 
 |Listener class name|Event description | Valkey or Redis<br/>`notify-keyspace-events` value|
 |:--:|:--:|:--:|
@@ -2061,3 +1456,90 @@ int listenerId = set.addListener(new DeletedObjectListener() {
 
 set.removeListener(listenerId);
 ```
+
+## Vector Set 
+
+Java implementation of Valkey or Redis based [Vector Set](https://www.javadoc.io/doc/org.redisson/redisson/latest/org/redisson/api/RVectorSet.html) object is a specialized data type designed for managing high-dimensional vector data and enabling fast vector similarity search. Vector sets are similar to sorted sets but instead of a score, each element has a string representation of a vector, making them ideal for AI applications, machine learning models, and semantic search use cases.
+
+Vector sets support the HNSW algorithm and use cosine similarity metrics for efficient vector similarity search. The data type is optimized for storing text embeddings and other high-dimensional vector representations commonly used in modern AI applications.
+
+**Features**
+
+The RVectorSet interfaces provide access to essential vector set operations including:
+
+- Vector Addition: Adding elements with their associated vectors to the set
+
+- Similarity Search: Retrieving elements most similar to a specified vector or existing element
+
+- Attribute Management: Setting and retrieving JSON attributes associated with vector elements
+
+- Filtered Search: Performing similarity searches with mathematical filters on element attributes
+
+- Cardinality Operations: Getting the number of elements and vector dimensions
+
+Usage examples:
+
+=== "Sync"
+    ```java
+	RVectorSet vectorSet = redisson.getVectorSet("my-vectors");
+	
+	vectorSet.add(VectorAddArgs.element("element1").vector(1.0, 1.0));
+	vectorSet.add(VectorAddArgs.element("element2").vector(-1.0, -1.0));
+
+    List<Double> vector1 = vectorSet.getVector("element1");
+	List<Double> vector2 = vectorSet.getVector("element2");
+
+    List<String> similarElements = vectorSet.getSimilar(VectorSimilarArgs.vector(1.0, 1.0));
+
+	vectorSet.remove("element1");
+	vectorSet.remove("element2");
+
+	```
+=== "Async"
+    ```java
+	RVectorSetAsync vectorSet = redisson.getVectorSet("my-vectors").async();
+
+	RFuture<Boolean> f1 = vectorSet.addAsync(VectorAddArgs.element("element1").vector(1.0, 1.0));
+	RFuture<Boolean> f2 = vectorSet.addAsync(VectorAddArgs.element("element2").vector(-1.0, -1.0));
+
+    RFuture<List<Double>> vector1 = vectorSet.getVectorAsync("element1");
+	RFuture<List<Double>> vector2 = vectorSet.getVectorAsync("element2");
+
+    RFuture<List<String>> similarElements = vectorSet.getSimilarAsync(VectorSimilarArgs.vector(1.0, 1.0));
+
+	RFuture<Boolean> r1 = vectorSet.removeAsync("element1");
+	RFuture<Boolean> r2 = vectorSet.removeAsync("element2");
+
+	```
+=== "Reactive"
+    ```java
+	RedissonReactiveClient redissonReactive = redisson.reactive();
+	RVectorSetReactive vectorSet = redissonReactive.getVectorSet("my-vectors");
+
+	Mono<Boolean> f1 = vectorSet.add(VectorAddArgs.element("element1").vector(1.0, 1.0));
+	Mono<Boolean> f2 = vectorSet.add(VectorAddArgs.element("element2").vector(-1.0, -1.0));
+
+    Mono<List<Double>> vector1 = vectorSet.getVector("element1");
+	Mono<List<Double>> vector2 = vectorSet.getVector("element2");
+
+    Mono<List<String>> similarElements = vectorSet.getSimilar(VectorSimilarArgs.vector(1.0, 1.0));
+	
+	Mono<Boolean> r1 = vectorSet.remove("element1");
+	Mono<Boolean> r2 = vectorSet.remove("element2");
+    ```
+=== "RxJava3"
+    ```java
+	RedissonRxClient redissonRx = redisson.rxJava();
+	RVectorSetRx<float[]> vectorSetRx = redissonRx.getVectorSet("myVectorSetRx");
+
+	Single<Boolean> f1 = vectorSet.add(VectorAddArgs.element("element1").vector(1.0, 1.0));
+	Single<Boolean> f2 = vectorSet.add(VectorAddArgs.element("element2").vector(-1.0, -1.0));
+
+    Single<List<Double>> vector1 = vectorSet.getVector("element1");
+	Single<List<Double>> vector2 = vectorSet.getVector("element2");
+
+    Single<List<String>> similarElements = vectorSet.getSimilar(VectorSimilarArgs.vector(1.0, 1.0));
+	
+	Single<Boolean> r1 = vectorSet.remove("element1");
+	Single<Boolean> r2 = vectorSet.remove("element2");
+    ```

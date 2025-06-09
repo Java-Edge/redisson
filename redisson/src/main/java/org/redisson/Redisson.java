@@ -36,9 +36,13 @@ import org.redisson.redisnode.RedissonSentinelMasterSlaveNodes;
 import org.redisson.redisnode.RedissonSingleNode;
 import org.redisson.renewal.LockRenewalScheduler;
 import org.redisson.transaction.RedissonTransaction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +55,9 @@ import java.util.concurrent.TimeUnit;
  *
  */
 public final class Redisson implements RedissonClient {
+
+    static final Logger log = LoggerFactory.getLogger(Redisson.class);
+    private final Set<Integer> printed = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final EvictionScheduler evictionScheduler;
     private final WriteBehindService writeBehindService;
@@ -347,12 +354,12 @@ public final class Redisson implements RedissonClient {
 
     @Override
     public <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, LocalCachedMapCacheOptions<K, V> options) {
-        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
     }
 
     @Override
     public <K, V> RLocalCachedMapCache<K, V> getLocalCachedMapCache(String name, Codec codec, LocalCachedMapCacheOptions<K, V> options) {
-        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Visit https://redisson.pro");
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
     }
 
     @Override
@@ -673,6 +680,9 @@ public final class Redisson implements RedissonClient {
 
     @Override
     public RLock getRedLock(RLock... locks) {
+        if (printed.add(1)) {
+            log.error("RedLock object is deprecated. Use RLock or RFencedLock object instead.");
+        }
         return new RedissonRedLock(locks);
     }
 
@@ -744,6 +754,17 @@ public final class Redisson implements RedissonClient {
     public RScript getScript(OptionalOptions options) {
         OptionalParams params = (OptionalParams) options;
         return new RedissonScript(commandExecutor.copy(params), params.getCodec());
+    }
+
+    @Override
+    public RVectorSet getVectorSet(String name) {
+        return new RedissonVectorSet(commandExecutor, name);
+    }
+
+    @Override
+    public RVectorSet getVectorSet(CommonOptions options) {
+        CommonParams params = (CommonParams) options;
+        return new RedissonVectorSet(commandExecutor.copy(params), params.getName());
     }
 
     @Override
@@ -890,19 +911,19 @@ public final class Redisson implements RedissonClient {
 
     @Override
     public RReliableTopic getReliableTopic(String name) {
-        return new RedissonReliableTopic(commandExecutor, name, null);
+        return new RedissonReliableTopic(commandExecutor, name);
     }
 
     @Override
     public RReliableTopic getReliableTopic(String name, Codec codec) {
-        return new RedissonReliableTopic(codec, commandExecutor, name, null);
+        return new RedissonReliableTopic(codec, commandExecutor, name);
     }
 
     @Override
     public RReliableTopic getReliableTopic(PlainOptions options) {
         PlainParams params = (PlainParams) options;
         return new RedissonReliableTopic(params.getCodec(),
-                commandExecutor.copy(params), params.getName(), null);
+                commandExecutor.copy(params), params.getName());
     }
 
     @Override
@@ -923,10 +944,29 @@ public final class Redisson implements RedissonClient {
 
     @Override
     public <V> RDelayedQueue<V> getDelayedQueue(RQueue<V> destinationQueue) {
+        if (printed.add(2)) {
+            log.error("RDelayedQueue object is deprecated due to github issues #3020, #2998, #1057. Use RReliableQueue object instead.");
+        }
+
         if (destinationQueue == null) {
             throw new NullPointerException();
         }
         return new RedissonDelayedQueue<V>(destinationQueue.getCodec(), commandExecutor, destinationQueue.getName());
+    }
+
+    @Override
+    public <V> RReliableQueue<V> getReliableQueue(String name) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
+    }
+
+    @Override
+    public <V> RReliableQueue<V> getReliableQueue(String name, Codec codec) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
+    }
+
+    @Override
+    public <V> RReliableQueue<V> getReliableQueue(PlainOptions options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
     }
 
     @Override
@@ -1005,16 +1045,28 @@ public final class Redisson implements RedissonClient {
 
     @Override
     public <V> RBoundedBlockingQueue<V> getBoundedBlockingQueue(String name) {
+        if (printed.add(5)) {
+            log.error("RBoundedBlockingQueue object is deprecated due to github issues #3979, #3835, #4481, #5104, #5575, #5653. Instead, use the RReliableQueue object with delay feature.");
+        }
+
         return new RedissonBoundedBlockingQueue<V>(commandExecutor, name, this);
     }
 
     @Override
     public <V> RBoundedBlockingQueue<V> getBoundedBlockingQueue(String name, Codec codec) {
+        if (printed.add(4)) {
+            log.error("RBoundedBlockingQueue object is deprecated due to github issues #3979, #3835, #4481, #5104, #5575, #5653. Instead, use the RReliableQueue object with delay feature.");
+        }
+
         return new RedissonBoundedBlockingQueue<V>(codec, commandExecutor, name, this);
     }
 
     @Override
     public <V> RBoundedBlockingQueue<V> getBoundedBlockingQueue(PlainOptions options) {
+        if (printed.add(3)) {
+            log.error("RBoundedBlockingQueue object is deprecated due to github issues #3979, #3835, #4481, #5104, #5575, #5653. Instead, use the RReliableQueue object with delay feature.");
+        }
+
         PlainParams params = (PlainParams) options;
         return new RedissonBoundedBlockingQueue<V>(params.getCodec(),
                 commandExecutor.copy(params), params.getName(), this);

@@ -74,6 +74,9 @@ public class RedissonCache implements Cache {
 
     @Override
     public RMap<?, ?> getNativeCache() {
+        if (map instanceof Supplier) {
+            return (RMap<?, ?>) ((Supplier<?>) map).get();
+        }
         return map;
     }
 
@@ -184,7 +187,7 @@ public class RedissonCache implements Cache {
             }
 
             ServiceManager sm = ((RedissonObject) map).getServiceManager();
-            long randomId = sm.generateValue();
+            long randomId = sm.getRandom().nextLong();
 
             RLock lock = map.getLock(key);
             return lock.lockAsync(randomId).thenCompose(rr -> {

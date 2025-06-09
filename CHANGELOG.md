@@ -3,6 +3,105 @@ Redisson Releases History
 
 Upgrade to __[Redisson PRO](https://redisson.pro)__ with **advanced features**.
 
+### 04-Jun-2025 - 3.49.0 released
+
+Feature - `RClusteredScoredSortedSetRx`, `RClusteredScoredSortedSetReactive` interfaces added for `RClusteredScoredSortedSet` object  
+Feature - `iteratorAsync()` methods added to `RSet` object (thanks to @seakider)  
+Feature - `readAllKeySetAsync(pattern)`, `readAllValuesAsync(pattern)` and `readAllEntrySetAsync()` methods added to RMap interface (thanks to @seakider)  
+Feature - Redisson PRO license key can be defined through `redisson.pro.key` key stored in Valkey or Redis  
+
+Fixed - local cache update in `putIfAbsent()`, `fastPutIfExists()` and `fastPutIfAbsent()` methods of `RLocalCachedMapCache` and `RClusteredLocalCachedMapCache` objects  
+Fixed - `RLocalCachedMapCacheNative` object in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RLocalCachedMapCacheNative.putIfAbsent()` method doesn't update local cache  
+Fixed - `RClusteredLocalCachedMapCacheNative` object in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RClusteredLocalCachedMapCacheNative.putIfAbsent()` method doesn't update local cache  
+Fixed - `RClusteredLocalCachedMapCache` object in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RLocalCachedMapCache` object in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `put()`, `fastPutIfAbsent()`, `putIfAbsent()` methods of `RLocalCachedMapCacheV2` in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RLocalCachedJsonStore` object in `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - missed classes added to the Hibernate 7 module  
+Fixed - `retryAttempts` setting value limit (thanks to @seakider)  
+Fixed - `RObject.rename()` method doesn't work in batch mode if the new and old name slots match  
+Fixed - minTimeout value calculation for HashedWheelTimer object  
+Fixed - `codec`, `loader` and `writer` settings can't be parsed in Micronaut cache yaml configuration  
+Fixed - environment variables for Redisson configuration can't be used with Micronaut 4  
+
+### 27-May-2025 - 3.48.0 released
+
+Feature - `retryDelay` and `reconnectionDelay` [settings](https://redisson.pro/docs/api-models/#command-execution-reliability) added, allowing to define a delay strategy. Available implementations: `FullJitterDelay`, `EqualJitterDelay`, `DecorrelatedJitterDelay` and `ConstantDelay`. Default is `EqualJitterDelay`  
+Feature - [Vector Set](https://redisson.pro/docs/data-and-services/collections/#vector-set) object added  
+Feature - Spring Data Redis 3.5.0 implementation  
+Feature - Hibernate 7 support added  
+
+Improvement - `RClusteredMapCache` eviction process optimization  
+
+Fixed - `RLocalCachedMap` with `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RClusteredLocalCachedMap` with `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RLocalCachedMapCacheV2` with `storeMode = LOCALCACHE` may allocate extra connections and miss updates if `syncStrategy = UPDATE`  
+Fixed - `RLocalCachedMapCacheV2` local cache updates  
+Fixed - `QueueTransferTask` throws NPE  
+Fixed - unknown command error is thrown if `RLock` object is used on Valkey Serverless deployment  
+Fixed - the count parameter of `RMap.valuesAsync()` method should not affect result  
+Fixed - `NOSCRIPT` error is thrown after failover by `RLock` methods  
+Fixed - RESP3 boolean value parsing  
+
+### 21-May-2025 - 3.47.0 released
+
+Feature - [ReliableFanout](https://redisson.pro/docs/data-and-services/queues/#reliable-fanout) object added  
+Feature - [processingMode](https://redisson.pro/docs/data-and-services/queues/#configuration) setting added to `RReliableQueue` config  
+Feature - [listeners](https://redisson.pro/docs/data-and-services/queues/#listeners) added to `RReliableQueue` object  
+Feature - [metrics](https://redisson.pro/docs/data-and-services/queues/#metrics) added to `RReliableQueue` object  
+Feature - `disableOperation()` and `enableOperation()` methods added to `RReliableQueue` object  
+Feature - `get()` and `getAll()` methods added to `RReliableQueue` object  
+Feature - `pollBatchSize`, `visibilityTimeout`, `negativeAcknowledgeDelay` consumer settings added to Spring Cloud Stream Binder  
+Feature - `RReliableQueue` implements `RDestroyable` interface  
+Feature - `readDiffEntries()`, `readIntersectionEntries()`, `readUnionEntries()` methods added to RScoredSortedSet (thanks to @seakider)  
+Feature - `valkeyCapabilities` setting added  
+
+Improvement - script logging in error message if useScriptCache = true  
+Improvement - `RReliableQueue` data structure optimization  
+
+Fixed - RClusteredLocalCachedMap.fastPut() method causes netty buffer leak if `storeMode = LOCALCACHE`  
+Fixed - `RReliableQueue.size()` method result shouldn't include delayed messages amount  
+Fixed - Spring Cache.getNativeCache() returns incorrect instance  
+Fixed - exessive connections creation for RClusteredLocalCachedMap and RClusteredLocalCachedMapCache if 'reconnectionStrategy = LOAD'  
+Fixed - readUnion(), readIntersection(), readDiff() methods of RSetCache throw exception  
+Fixed - New connection opened for each write operation after failover in Sentinel mode (thanks to @seakider)  
+Fixed - Micronaut 4.x connects only to a single node  
+Fixed - RedisURI(String) constructor doesn't set the hashCode  
+Fixed - Spring Data Redis `addMessageListener()` method hangs if multiple listeners added to the same topic or pattern  
+Fixed - detection of `WAIT` and `WAITAOF` commands availability  
+Fixed - JCacheManager does not remove cache instance from map when calling closeCache() (thanks to @seakider)  
+Fixed - starvation of pub/sub connections may cause a memory leak  
+Fixed - `RMap.loadAll()` method may hang in Cluster  
+Fixed - `None of slaves were synced` exception is thrown  
+Fixed - Spring Data Redis `ReactiveZSetCommands.zadd()` default param (thanks to @lookroot)  
+
+
+### 29-Apr-2025 - 3.46.0 released
+
+Feature - [Reliable Queue](https://redisson.pro/docs/data-and-services/queues/#reliable-queue) object added. `RDelayedQueue` and `RBoundedBlockingQueue` have been deprecated  
+Feature - `fairLockWaitTimeout` Redisson setting added (thanks to @seakider)  
+Feature - `credentialsReapplyInterval` Redisson setting added (thanks to @seakider)  
+Feature - support for JDK Atomic objects in Kryo5Codec (thanks to @bergander)  
+Feature - `WorkerOptions.tasksInjector` setting added (thanks to @zzhlhc)  
+
+Breaking change - Spring Cloud Stream Binder queue implementation replaced with `RReliableQueue` object  
+Breaking change - RedisPubSubConnection.removeListener() and RedisPubSubConnection.addListener() methods signature changed  
+
+Improvement - `useScriptCache` setting is true by default  
+Improvement - Add check for `keepAliveTime` and `rateInterval` in RRateLimiter (thanks to @shrink)  
+
+Fixed - data leak in RReliableTopic (thanks to @Chengzhi1803472613)  
+Fixed - PubSub stops working after Redis restart in sentinel mode (thanks to @seakider)  
+Fixed - `CommandAsyncService.syncedEval()` method doesn't update correctly available secondary nodes  
+Fixed - `expire-after-write` and `expire-after-access` settings aren't applied to async Micronaut Cache  
+Fixed - `RBatch` exception object doesn't contain suppressed exceptions  
+Fixed - `RRemoteService` fails to operate if codec defined as an anonymous inner class  
+Fixed - Watchdog fails to renew on reentry locks (thanks to @seakider)  
+Fixed - `RKeys.unlinkByPattern()` and `RKeys.deleteByPattern()` methods don't handle keys with non-ASCII characters  
+Fixed - `RenewalTask` throws `IndexOutOfBoundsException`  
+
 ### 18-Mar-2025 - 3.45.1 released
 
 Fixed - Issue with asynchronous Micronaut @Cacheable methods (thanks to @seakider)  

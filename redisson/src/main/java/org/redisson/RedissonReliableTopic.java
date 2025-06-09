@@ -77,18 +77,15 @@ public final class RedissonReliableTopic extends RedissonExpirable implements RR
     private final AtomicBoolean subscribed = new AtomicBoolean();
     private final String timeoutName;
 
-    RedissonReliableTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
+    RedissonReliableTopic(Codec codec, CommandAsyncExecutor commandExecutor, String name) {
         super(codec, commandExecutor, name);
         stream = new RedissonStream<>(new CompositeCodec(StringCodec.INSTANCE, codec), commandExecutor, name);
-        if (subscriberId == null) {
-            subscriberId = getServiceManager().generateId();
-        }
-        this.subscriberId = subscriberId;
+        this.subscriberId = getServiceManager().generateId();
         this.timeoutName = getTimeout(getRawName());
     }
 
-    RedissonReliableTopic(CommandAsyncExecutor commandExecutor, String name, String subscriberId) {
-        this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name, subscriberId);
+    RedissonReliableTopic(CommandAsyncExecutor commandExecutor, String name) {
+        this(commandExecutor.getServiceManager().getCfg().getCodec(), commandExecutor, name);
     }
 
     private String getTimeout(String name) {
@@ -231,6 +228,7 @@ public final class RedissonReliableTopic extends RedissonExpirable implements RR
                                 "local expired = redis.call('zrangebyscore', KEYS[2], 0, tonumber(ARGV[2]) - 1); "
                                 + "for i, v in ipairs(expired) do "
                                     + "redis.call('xgroup', 'destroy', KEYS[1], v); "
+                                    + "redis.call('zrem', KEYS[2], v); "
                                 + "end; "
                                 + "local r = redis.call('zscore', KEYS[2], ARGV[1]); "
 

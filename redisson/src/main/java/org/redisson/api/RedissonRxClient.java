@@ -1301,6 +1301,43 @@ public interface RedissonRxClient {
     <V> RQueueRx<V> getQueue(PlainOptions options);
 
     /**
+     * Returns a reliable queue instance by name.
+     * <p>
+     * The reliable queue provides guaranteed message delivery through acknowledgment mechanisms
+     * and synchronous replication.
+     *
+     * @param name the name of the queue
+     * @param <V> the type of elements in this queue
+     * @return Reliable queue instance
+     */
+    <V> RReliableQueueRx<V> getReliableQueue(String name);
+
+    /**
+     * Returns a reliable queue instance by name and provided codec.
+     * <p>
+     * The reliable queue provides guaranteed message delivery through acknowledgment mechanisms
+     * and synchronous replication.
+     *
+     * @param name the name of the queue
+     * @param codec the codec used for message serialization and deserialization
+     * @param <V> the type of elements in this queue
+     * @return Reliable queue instance
+     */
+    <V> RReliableQueueRx<V> getReliableQueue(String name, Codec codec);
+
+    /**
+     * Returns a reliable queue instance with the specified configuration options.
+     * <p>
+     * The reliable queue provides guaranteed message delivery through acknowledgment mechanisms
+     * and synchronous replication.
+     *
+     * @param options configuration options for the reliable queue
+     * @param <V> the type of elements in this queue
+     * @return Reliable queue instance
+     */
+    <V> RReliableQueueRx<V> getReliableQueue(PlainOptions options);
+
+    /**
      * Returns RingBuffer based queue.
      * 
      * @param <V> value type
@@ -1610,6 +1647,26 @@ public interface RedissonRxClient {
      * @return Script object
      */
     RScriptRx getScript(OptionalOptions options);
+
+    /**
+     * Returns vector set instance by name.
+     * <p>
+     * Requires <b>Redis 8.0.0 and higher.</b>
+     *
+     * @param name - name of vector set
+     * @return vector set instance
+     */
+    RVectorSetRx getVectorSet(String name);
+
+    /**
+     * Returns vector set instance by name with specified <code>options</code>.
+     * <p>
+     * Requires <b>Redis 8.0.0 and higher.</b>
+     *
+     * @param options instance options
+     * @return vector set instance
+     */
+    RVectorSetRx getVectorSet(CommonOptions options);
 
     /**
      * Creates transaction with <b>READ_COMMITTED</b> isolation level.

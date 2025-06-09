@@ -55,6 +55,7 @@ import org.redisson.client.RedisNodeNotFoundException;
 import org.redisson.client.codec.Codec;
 import org.redisson.client.protocol.RedisCommand;
 import org.redisson.client.protocol.RedisCommands;
+import org.redisson.command.NoSyncedSlavesException;
 import org.redisson.config.Config;
 import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.config.Protocol;
@@ -77,6 +78,7 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -279,7 +281,8 @@ public final class ServiceManager {
     }
 
     private void initTimer() {
-        int minTimeout = Math.min(config.getRetryInterval(), config.getTimeout());
+        Duration testdelay = config.getRetryDelay().calcDelay(0);
+        int minTimeout = Math.min((int) testdelay.toMillis(), config.getTimeout());
         if (minTimeout % 100 != 0) {
             minTimeout = (minTimeout % 100) / 2;
         } else if (minTimeout == 100) {
@@ -288,7 +291,8 @@ public final class ServiceManager {
             minTimeout = 100;
         }
 
-        timer = new HashedWheelTimer(new DefaultThreadFactory("redisson-timer"), minTimeout, TimeUnit.MILLISECONDS, 1024, false);
+        timer = new HashedWheelTimer(new DefaultThreadFactory("redisson-timer"),
+                minTimeout, TimeUnit.MILLISECONDS, 1024, false);
 
         connectionWatcher = new IdleConnectionWatcher(group, config);
     }
@@ -416,7 +420,7 @@ public final class ServiceManager {
     public <T> CompletableFuture<T> createNodeNotFoundFuture(String channelName, int slot) {
         RedisNodeNotFoundException ex = new RedisNodeNotFoundException("Node for name: " + channelName + " slot: " + slot
                 + " hasn't been discovered yet. Check cluster slots coverage using CLUSTER NODES command. " +
-                "Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
+                "Try to increase 'retryDelay' and/or 'retryAttempts' settings. Last cluster nodes topology: " + lastClusterNodes);
         CompletableFuture<T> promise = new CompletableFuture<>();
         promise.completeExceptionally(ex);
         return promise;
@@ -428,9 +432,9 @@ public final class ServiceManager {
                 && source.getSlot() != null
                     && source.getAddr() == null
                         && source.getRedisClient() == null) {
-            ex = new RedisNodeNotFoundException("Node for slot: " + source.getSlot() + " hasn't been discovered yet. Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
+            ex = new RedisNodeNotFoundException("Node for slot: " + source.getSlot() + " hasn't been discovered yet. Increase 'retryAttempts' setting. Last cluster nodes topology: " + lastClusterNodes);
         } else {
-            ex = new RedisNodeNotFoundException("Node: " + source + " hasn't been discovered yet. Increase value of retryAttempts and/or retryInterval settings. Last cluster nodes topology: " + lastClusterNodes);
+            ex = new RedisNodeNotFoundException("Node: " + source + " hasn't been discovered yet. Increase 'retryAttempts' setting. Last cluster nodes topology: " + lastClusterNodes);
         }
         return ex;
     }
@@ -562,8 +566,7 @@ public final class ServiceManager {
 
     public <T> RFuture<T> execute(Supplier<CompletionStage<T>> supplier) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        int retryAttempts = config.getRetryAttempts();
-        AtomicInteger attempts = new AtomicInteger(retryAttempts);
+        AtomicInteger attempts = new AtomicInteger();
         execute(attempts, result, supplier);
         return new CompletableFutureWrapper<>(result);
     }
@@ -572,16 +575,17 @@ public final class ServiceManager {
         CompletionStage<T> future = supplier.get();
         future.whenComplete((r, e) -> {
             if (e != null) {
-                if (e.getCause() != null
-                        && e.getCause().getMessage() != null
-                            && e.getCause().getMessage().equals("None of slaves were synced")) {
-                    if (attempts.decrementAndGet() < 0) {
+                if (e.getCause() instanceof NoSyncedSlavesException) {
+                    if (attempts.get() >= config.getRetryAttempts()) {
                         result.completeExceptionally(e);
                         return;
                     }
 
+                    attempts.incrementAndGet();
+
+                    Duration timeout = config.getRetryDelay().calcDelay(attempts.get());
                     newTimeout(t -> execute(attempts, result, supplier),
-                            config.getRetryInterval(), TimeUnit.MILLISECONDS);
+                                                timeout.toMillis(), TimeUnit.MILLISECONDS);
                     return;
                 }
 
@@ -605,6 +609,10 @@ public final class ServiceManager {
     }
 
     private final Random random = RandomXoshiro256PlusPlus.create();
+
+    public Random getRandom() {
+        return random;
+    }
 
     public Long generateValue() {
         return random.nextLong();

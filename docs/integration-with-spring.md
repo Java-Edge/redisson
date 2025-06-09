@@ -274,33 +274,72 @@ spring:
 {% include 'cache/Spring-cache.md' %}
 
 ## Spring Session
-Please note that Redis or Valkey `notify-keyspace-events` setting should contain `Exg` letters to make Spring Session integration work.
+
+### Dependencies
+
+!!! note
+	Redis or Valkey `notify-keyspace-events` setting should contain `Exg` letters to make Spring Session integration work.
 
 Ensure you have Spring Session library in your classpath, add it if necessary:  
 
-**Maven**
+1. Add Spring Session Data Redis library in classpath:  
+    Maven:
+    ```xml
+    <dependency>
+      <groupId>org.springframework.session</groupId>
+      <artifactId>spring-session-data-redis</artifactId>
+      <version>3.4.3</version>
+    </dependency>
+    ```
+    Gradle:
+    ```gradle
+    compile 'org.springframework.session:spring-session-data-redis:3.4.3'  
+    ```
+2. Add [Redisson Spring Data Redis](#spring-data-redis) library in classpath:  
 
-```xml
-<dependency>
-    <groupId>org.springframework.session</groupId>
-    <artifactId>spring-session-core</artifactId>
-    <version>3.4.1</version>
-</dependency>
+    <div class="grid cards" markdown>
 
-<dependency>
-   <groupId>org.redisson</groupId>
-   <artifactId>redisson-spring-data-34</artifactId>
-   <version>xVERSIONx</version>
-</dependency>
-```
+    -   **Redisson PRO**
 
-**Gradle**
+        Maven
 
-```gradle
-compile 'org.springframework.session:spring-session-core:3.4.1'
+        ```xml  
+        <dependency>
+           <groupId>pro.redisson</groupId>
+           <artifactId>redisson-spring-data-34</artifactId>
+           <version>xVERSIONx</version>
+        </dependency>
+        ```
 
-compile 'org.redisson:redisson-spring-data-34:xVERSIONx'
-```
+        Gradle
+
+        ```groovy
+        compile 'pro.redisson:redisson-spring-data-34:xVERSIONx'
+        ```
+
+    -   **Community Edition**
+
+        Maven
+
+        ```xml  
+        <dependency>
+           <groupId>org.redisson</groupId>
+           <artifactId>redisson-spring-data-34</artifactId>
+           <version>xVERSIONx</version>
+        </dependency>
+        ```
+
+        Gradle
+
+        ```groovy
+        compile 'org.redisson:redisson-spring-data-34:xVERSIONx'
+        ```
+
+    </div>
+
+    [Redisson PRO vs. Community Edition ➜](https://redisson.pro/feature-comparison.html)
+    <br>
+    <br>    
 
 ### Spring Http Session configuration
 
@@ -347,66 +386,7 @@ Add configuration class which extends `AbstractReactiveWebInitializer` class:
 
 ### Spring Boot configuration
 
-1. Add Spring Session Data Redis library in classpath:  
-    Maven:
-    ```xml
-    <dependency>
-      <groupId>org.springframework.session</groupId>
-      <artifactId>spring-session-data-redis</artifactId>
-      <version>3.2.1</version>
-    </dependency>
-    ```
-    Gradle:
-    ```gradle
-    compile 'org.springframework.session:spring-session-data-redis:3.4.1'  
-    ```
-2. Add Redisson Spring Data Redis library in classpath:  
-
-    <div class="grid cards" markdown>
-
-    -   **Redisson PRO**
-
-        Maven
-
-        ```xml  
-        <dependency>
-           <groupId>pro.redisson</groupId>
-           <artifactId>redisson-spring-data-34</artifactId>
-           <version>xVERSIONx</version>
-        </dependency>
-        ```
-
-        Gradle
-
-        ```groovy
-        compile 'pro.redisson:redisson-spring-data-34:xVERSIONx'
-        ```
-
-    -   **Community Edition**
-
-        Maven
-
-        ```xml  
-        <dependency>
-           <groupId>org.redisson</groupId>
-           <artifactId>redisson-spring-data-34</artifactId>
-           <version>xVERSIONx</version>
-        </dependency>
-        ```
-
-        Gradle
-
-        ```groovy
-        compile 'org.redisson:redisson-spring-data-34:xVERSIONx'
-        ```
-
-    </div>
-
-    [Redisson PRO vs. Community Edition ➜](https://redisson.pro/feature-comparison.html)
-    <br>
-    <br>    
-
-3. Define follow properties in spring-boot settings  
+Define follow properties in spring-boot settings:  
     ```
     spring.session.store-type=redis
     spring.redis.redisson.file=classpath:redisson.yaml
@@ -504,7 +484,20 @@ public class TransactionalBean {
 
 _This feature is available only in [Redisson PRO](https://redisson.pro/feature-comparison.html) edition._
 
-Redisson implements Spring Cloud Stream integration based on the reliable Stream structure for message delivery. To use Redis or Valkey binder with Redisson you need to add [Spring Cloud Stream](https://spring.io/projects/spring-cloud-stream) Binder library in classpath:  
+Redisson implements [Spring Cloud Stream](https://spring.io/projects/spring-cloud-stream) integration using the [Reliable Queue](data-and-services/queues.md/#reliable-queue) for messages delivery. 
+
+Compatible with Spring versions below.
+
+Spring Cloud Stream | Spring Cloud | Spring Boot
+-- | -- | --
+4.2.x | 2024.0.x | 3.4.x
+4.1.x | 2023.0.x | 3.0.x - 3.3.x
+4.0.x | 2022.0.x | 3.0.x - 3.3.x
+3.2.x | 2021.0.x | 2.6.x, 2.7.x (Starting with 2021.0.3 of Spring Cloud)
+3.1.x | 2020.0.x | 2.4.x, 2.5.x (Starting with 2020.0.3 of Spring Cloud)
+
+
+To use Valkey or Redis binder with Redisson you need to add Spring Cloud Stream Binder library in classpath:  
 
 Maven:
 ```xml
@@ -519,17 +512,15 @@ Gradle:
 compile 'pro.redisson:spring-cloud-stream-binder-redisson:xVERSIONx'  
 ```
 
-Compatible with Spring versions below.
-
-Spring Cloud Stream | Spring Cloud | Spring Boot
--- | -- | --
-4.2.x | 2024.0.x | 3.4.x
-4.1.x | 2023.0.x | 3.0.x - 3.3.x
-4.0.x | 2022.0.x | 3.0.x - 3.3.x
-3.2.x | 2021.0.x | 2.6.x, 2.7.x (Starting with 2021.0.3 of Spring Cloud)
-3.1.x | 2020.0.x | 2.4.x, 2.5.x (Starting with 2020.0.3 of Spring Cloud)
-
 ### Receiving messages
+
+Consumer settings:
+
+- `pollBatchSize` - Sets the maximum number of messages to retrieve in a single poll operation. Default value is `10`.
+	
+- `visibilityTimeout` - Sets the visibility timeout for retrieved messages. The time period during which a message is invisible to other consumers after being retrieved. This prevents duplicate processing and allows the message to reappear in the queue if it wasn't acknowledged during that timeout. Default value is `30 seconds`.
+
+- `negativeAcknowledgeDelay` - Specifies the delay duration before a message handled with an exception is eligible for redelivery. Default value is `15 seconds`.
 
 Register the input binder (an event sink) for receiving messages as follows:
 
@@ -546,21 +537,50 @@ Define channel id in the configuration file `application.properties`. Example fo
 
 ```
 spring.cloud.stream.bindings.receiveMessage-in-0.destination=my-channel
+spring.cloud.stream.redisson.bindings.receiveMessage-in-0.consumer.pollBatchSize=15
+spring.cloud.stream.redisson.bindings.receiveMessage-in-0.consumer.visibilityTimeout=60s
+```
+
+YAML configuration:
+
+```
+spring:
+  cloud:
+    stream:
+      bindings:
+        receiveMessage-in-0:
+          destination: my-channel
+      redisson:
+        bindings:
+          receiveMessage-in-0:
+            consumer:
+              pollBatchSize: 15
+              visibilityTimeout: 60s
 ```
 
 ### Publishing messages
 
-Register the output binder (an event source) for publishing messages as follows:
+- Publish messages using an output binder
 
-```java
-@Bean
-public Supplier<MyObject> feedSupplier() {
-	return () -> {
-           // ...
-           return new MyObject();
-	};
-}
-```
+    Register the output binder (an event source) for publishing messages as follows:
+
+    ```java
+    @Bean
+    public Supplier<MyObject> feedSupplier() {
+        return () -> {
+               // ...
+               return new MyObject();
+        };
+    }
+    ```
+
+- Publish messages using `org.springframework.cloud.stream.function.StreamBridge` object
+
+       ```java
+       StreamBridge bridge;
+       
+       bridge.send("feedSupplier-out-0", new MyObject());
+       ```
 
 Define channel id in the configuration file `application.properties`. Example for `feedSupplier` bean defined above connected to `my-channel` channel:
 
@@ -568,6 +588,20 @@ Define channel id in the configuration file `application.properties`. Example fo
 spring.cloud.stream.bindings.feedSupplier-out-0.destination=my-channel
 spring.cloud.stream.bindings.feedSupplier-out-0.producer.useNativeEncoding=true
 ```
+
+YAML configuration:
+
+```
+spring:
+  cloud:
+    stream:
+      bindings:
+        feedSupplier-out-0:
+          destination: my-channel
+          producer:
+          	useNativeEncoding: true
+```
+
 
 ## Spring Data Redis
 
@@ -617,6 +651,8 @@ Integrates Redisson with Spring Data Redis library. Implements Spring Data's `Re
             <artifactId>redisson-spring-data-33</artifactId>
             <!-- for Spring Data Redis v.3.4.x -->
             <artifactId>redisson-spring-data-34</artifactId>
+            <!-- for Spring Data Redis v.3.5.x -->
+            <artifactId>redisson-spring-data-35</artifactId>
             <version>xVERSIONx</version>
         </dependency>
         ```
@@ -656,6 +692,8 @@ Integrates Redisson with Spring Data Redis library. Implements Spring Data's `Re
         compile 'pro.redisson:redisson-spring-data-33:xVERSIONx'
         // for Spring Data Redis v.3.4.x
         compile 'pro.redisson:redisson-spring-data-34:xVERSIONx'
+        // for Spring Data Redis v.3.5.x
+        compile 'pro.redisson:redisson-spring-data-35:xVERSIONx'
         ```
 
     -   **Community Edition**
@@ -697,6 +735,8 @@ Integrates Redisson with Spring Data Redis library. Implements Spring Data's `Re
             <artifactId>redisson-spring-data-33</artifactId>
             <!-- for Spring Data Redis v.3.4.x -->
             <artifactId>redisson-spring-data-34</artifactId>
+            <!-- for Spring Data Redis v.3.5.x -->
+            <artifactId>redisson-spring-data-35</artifactId>
             <version>xVERSIONx</version>
         </dependency>
         ```
@@ -736,6 +776,8 @@ Integrates Redisson with Spring Data Redis library. Implements Spring Data's `Re
         compile 'org.redisson:redisson-spring-data-33:xVERSIONx'
         // for Spring Data Redis v.3.4.x
         compile 'org.redisson:redisson-spring-data-34:xVERSIONx'
+        // for Spring Data Redis v.3.5.x
+        compile 'org.redisson:redisson-spring-data-35:xVERSIONx'
         ```
 
     </div>

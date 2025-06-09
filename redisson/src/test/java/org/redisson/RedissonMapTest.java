@@ -17,6 +17,7 @@ import org.redisson.client.codec.StringCodec;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -160,7 +161,7 @@ public class RedissonMapTest extends BaseMapTest {
         CompletionStage<Void> f = iterateAll(iterator, list);
         f.toCompletableFuture().join();
 
-        assertThat(list.size()).isEqualTo(2);
+        assertThat(list.size()).isEqualTo(3);
 
     }
 
@@ -204,7 +205,7 @@ public class RedissonMapTest extends BaseMapTest {
         CompletionStage<Void> f = iterateAll(iterator, list);
         f.toCompletableFuture().join();
 
-        assertThat(list.size()).isEqualTo(2);
+        assertThat(list.size()).isEqualTo(3);
 
     }
 
@@ -275,6 +276,36 @@ public class RedissonMapTest extends BaseMapTest {
         assertThat(map.readAllEntrySet().size()).isEqualTo(3);
         Map<Integer, String> testMap = new HashMap<Integer, String>(map);
         assertThat(map.readAllEntrySet()).containsExactlyElementsOf(testMap.entrySet());
+    }
+
+    @Test
+    public void testReadAllEntrySetWithPattern() throws ExecutionException, InterruptedException {
+        RMap<String, String> map = redisson.getMap("simple12", StringCodec.INSTANCE);
+        map.put("10", "12");
+        map.put("12", "33");
+        map.put("21", "43");
+
+        assertThat((map.readAllEntrySetAsync("1?")).get().size()).isEqualTo(2);
+    }
+
+    @Test
+    public void testReadAllKeySetWithPattern() throws ExecutionException, InterruptedException {
+        RMap<String, String> map = redisson.getMap("simple12", StringCodec.INSTANCE);
+        map.put("10", "12");
+        map.put("12", "33");
+        map.put("21", "43");
+
+        assertThat((map.readAllKeySetAsync("1?")).get()).containsOnly("10", "12");
+    }
+
+    @Test
+    public void testReadAllValuesWithPattern() throws ExecutionException, InterruptedException {
+        RMap<String, String> map = redisson.getMap("simple12", StringCodec.INSTANCE);
+        map.put("10", "12");
+        map.put("12", "33");
+        map.put("21", "43");
+
+        assertThat((map.readAllValuesAsync("1?")).get()).containsOnly("12", "33");
     }
 
     @Test

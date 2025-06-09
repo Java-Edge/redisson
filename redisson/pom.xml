@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.redisson</groupId>
         <artifactId>redisson-parent</artifactId>
-        <version>3.45.2-SNAPSHOT</version>
+        <version>3.49.1-SNAPSHOT</version>
         <relativePath>../</relativePath>
     </parent>
 
@@ -150,19 +150,19 @@
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>
             <artifactId>tomcat-embed-core</artifactId>
-            <version>10.1.39</version>
+            <version>10.1.41</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.tomcat.embed</groupId>
             <artifactId>tomcat-embed-jasper</artifactId>
-            <version>10.1.39</version>
+            <version>10.1.41</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.tomcat</groupId>
             <artifactId>tomcat-jasper</artifactId>
-            <version>10.1.39</version>
+            <version>10.1.41</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -175,28 +175,28 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-test</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-core</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-expression</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-webflux</artifactId>
             <!-- 4.1+ -->            
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>test</scope>
         </dependency>
 
@@ -331,7 +331,6 @@
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.bytebuddy</groupId>
@@ -347,7 +346,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -355,7 +354,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-beans</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -363,7 +362,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-context-support</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -371,7 +370,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
@@ -380,7 +379,7 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-tx</artifactId>
             <!-- 4.1+ -->
-            <version>6.1.14</version>
+            <version>6.1.20</version>
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>

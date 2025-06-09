@@ -683,12 +683,12 @@ public final class RedissonRx implements RedissonRxClient {
 
     @Override
     public RReliableTopicRx getReliableTopic(String name) {
-        return RxProxyBuilder.create(commandExecutor, new RedissonReliableTopic(commandExecutor, name, null), RReliableTopicRx.class);
+        return RxProxyBuilder.create(commandExecutor, new RedissonReliableTopic(commandExecutor, name), RReliableTopicRx.class);
     }
 
     @Override
     public RReliableTopicRx getReliableTopic(String name, Codec codec) {
-        return RxProxyBuilder.create(commandExecutor, new RedissonReliableTopic(codec, commandExecutor, name, null), RReliableTopicRx.class);
+        return RxProxyBuilder.create(commandExecutor, new RedissonReliableTopic(codec, commandExecutor, name), RReliableTopicRx.class);
     }
 
     @Override
@@ -696,7 +696,7 @@ public final class RedissonRx implements RedissonRxClient {
         PlainParams params = (PlainParams) options;
         CommandRxExecutor ce = commandExecutor.copy(params);
         return RxProxyBuilder.create(commandExecutor,
-                new RedissonReliableTopic(params.getCodec(), ce, params.getName(), null), RReliableTopicRx.class);
+                new RedissonReliableTopic(params.getCodec(), ce, params.getName()), RReliableTopicRx.class);
     }
 
     @Override
@@ -734,6 +734,21 @@ public final class RedissonRx implements RedissonRxClient {
         CommandRxExecutor ce = commandExecutor.copy(params);
         return RxProxyBuilder.create(commandExecutor, new RedissonQueue<V>(params.getCodec(), ce, params.getName(), null),
                 new RedissonListRx<V>(new RedissonList<V>(params.getCodec(), ce, params.getName(), null)), RQueueRx.class);
+    }
+
+    @Override
+    public <V> RReliableQueueRx<V> getReliableQueue(String name) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
+    }
+
+    @Override
+    public <V> RReliableQueueRx<V> getReliableQueue(String name, Codec codec) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
+    }
+
+    @Override
+    public <V> RReliableQueueRx<V> getReliableQueue(PlainOptions options) {
+        throw new UnsupportedOperationException("This feature is implemented in the Redisson PRO version. Please refer to https://redisson.pro/feature-comparison.html");
     }
 
     @Override
@@ -967,6 +982,18 @@ public final class RedissonRx implements RedissonRxClient {
         OptionalParams params = (OptionalParams) options;
         CommandRxExecutor ce = commandExecutor.copy(params);
         return RxProxyBuilder.create(commandExecutor, new RedissonScript(ce, params.getCodec()), RScriptRx.class);
+    }
+
+    @Override
+    public RVectorSetRx getVectorSet(String name) {
+        return RxProxyBuilder.create(commandExecutor, new RedissonVectorSet(commandExecutor, name), RVectorSetRx.class);
+    }
+
+    @Override
+    public RVectorSetRx getVectorSet(CommonOptions options) {
+        CommonParams params = (CommonParams) options;
+        CommandRxExecutor ce = commandExecutor.copy(params);
+        return RxProxyBuilder.create(commandExecutor, new RedissonVectorSet(ce, params.getName()), RVectorSetRx.class);
     }
 
     @Override
